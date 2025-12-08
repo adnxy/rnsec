@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>rnsec - React Native Security Scanner</title>
+    <meta name="description" content="Open-source security scanner for React Native & Expo apps. Fast, local, developer-first vulnerability analysis.">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <style>
+        * {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        }
+        .gradient-text {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .gradient-border {
+            position: relative;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 1px;
+            border-radius: 0.75rem;
+        }
+        .gradient-border-content {
+            background: #0f172a;
+            border-radius: 0.75rem;
+            padding: 2rem;
+        }
+        .pattern-bg {
+            background-image: 
+                radial-gradient(circle at 20% 50%, rgba(102, 126, 234, 0.03) 0%, transparent 50%),
+                radial-gradient(circle at 80% 80%, rgba(118, 75, 162, 0.03) 0%, transparent 50%);
+        }
+        .code-block {
+            background: linear-gradient(to bottom, #1e293b 0%, #0f172a 100%);
+            border: 1px solid rgba(148, 163, 184, 0.1);
+        }
+        @keyframes float {
+            0%, 100% { transform: translateY(0px); }
+            50% { transform: translateY(-20px); }
+        }
+        .float-animation {
+            animation: float 6s ease-in-out infinite;
+        }
+        .glow {
+            box-shadow: 0 0 40px rgba(102, 126, 234, 0.3);
+        }
+    </style>
+</head>
+<body class="bg-slate-950 text-slate-100 antialiased">
+    
+    <!-- Navigation -->
+    <nav class="fixed top-0 w-full z-50 bg-slate-950/80 backdrop-blur-xl border-b border-slate-800/50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center h-16">
+                <div class="flex items-center space-x-2">
+                    <svg class="w-8 h-8 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path>
+                    </svg>
+                    <span class="text-xl font-bold">rnsec</span>
+                </div>
+                <div class="hidden md:flex items-center space-x-8">
+                    <a href="#features" class="text-slate-300 hover:text-white transition-colors">Features</a>
+                    <a href="#why" class="text-slate-300 hover:text-white transition-colors">Why rnsec</a>
+                    <a href="https://github.com/yourusername/rnsec" target="_blank" class="text-slate-300 hover:text-white transition-colors">Docs</a>
+                    <a href="https://github.com/yourusername/rnsec" target="_blank" class="flex items-center space-x-2 px-4 py-2 bg-slate-800 hover:bg-slate-700 rounded-lg transition-colors">
+                        <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                            <path fill-rule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" clip-rule="evenodd"></path>
+                        </svg>
+                        <span>GitHub</span>
+                    </a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section class="relative pt-32 pb-20 px-4 sm:px-6 lg:px-8 overflow-hidden pattern-bg">
+        <!-- Floating elements background -->
+        <div class="absolute top-20 right-10 w-72 h-72 bg-purple-500/10 rounded-full blur-3xl float-animation"></div>
+        <div class="absolute bottom-20 left-10 w-96 h-96 bg-blue-500/10 rounded-full blur-3xl float-animation" style="animation-delay: -3s;"></div>
+        
+        <div class="max-w-6xl mx-auto text-center relative z-10">
+            <div class="inline-flex items-center px-4 py-2 bg-slate-800/50 border border-slate-700 rounded-full mb-8 backdrop-blur-sm">
+                <span class="w-2 h-2 bg-green-500 rounded-full mr-2 animate-pulse"></span>
+                <span class="text-sm text-slate-300">Open Source • MIT Licensed • Privacy First</span>
+            </div>
+            
+            <h1 class="text-5xl sm:text-6xl lg:text-7xl font-extrabold tracking-tight mb-6">
+                React Native
+                <span class="block mt-2 gradient-text">Security Scanner</span>
+            </h1>
+            
+            <p class="text-xl sm:text-2xl text-slate-400 max-w-3xl mx-auto mb-6 leading-relaxed">
+                The open-source tool for identifying vulnerabilities in React Native & Expo apps.
+            </p>
+            
+            <p class="text-lg text-slate-500 max-w-2xl mx-auto mb-12">
+                Free, fast, developer-first security analysis for mobile apps. Built for engineering teams who care about quality and security.
+            </p>
+            
+            <div class="flex flex-col sm:flex-row items-center justify-center gap-4">
+                <a href="#install" class="group w-full sm:w-auto px-8 py-4 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white font-semibold rounded-xl transition-all duration-200 transform hover:scale-105 glow">
+                    <span class="flex items-center justify-center">
+                        Get Started
+                        <svg class="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"></path>
+                        </svg>
+                    </span>
+                </a>
+                <a href="https://github.com/yourusername/rnsec" target="_blank" class="w-full sm:w-auto px-8 py-4 bg-slate-800 hover:bg-slate-700 text-white font-semibold rounded-xl border border-slate-700 transition-all duration-200">
+                    <span class="flex items-center justify-center">
+                        <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 24 24">
+                            <path fill-rule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" clip-rule="evenodd"></path>
+                        </svg>
+                        View on GitHub
+                    </span>
+                </a>
+            </div>
+
+            <!-- Trust badges -->
+            <div class="mt-16 flex flex-wrap items-center justify-center gap-8 text-sm text-slate-500">
+                <div class="flex items-center space-x-2">
+                    <svg class="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                    </svg>
+                    <span>Zero data collection</span>
+                </div>
+                <div class="flex items-center space-x-2">
+                    <svg class="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                    </svg>
+                    <span>100% local scanning</span>
+                </div>
+                <div class="flex items-center space-x-2">
+                    <svg class="w-5 h-5 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                    </svg>
+                    <span>No build required</span>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Code Example Section -->
+    <section id="install" class="py-20 px-4 sm:px-6 lg:px-8 bg-slate-900/50">
+        <div class="max-w-6xl mx-auto">
+            <div class="text-center mb-12">
+                <h2 class="text-3xl sm:text-4xl font-bold mb-4">Get started in seconds</h2>
+                <p class="text-lg text-slate-400">No configuration needed. Just install and scan.</p>
+            </div>
+
+            <div class="grid lg:grid-cols-2 gap-8">
+                <!-- Installation -->
+                <div class="code-block rounded-xl p-6 border border-slate-800/50">
+                    <div class="flex items-center justify-between mb-4">
+                        <span class="text-sm font-semibold text-slate-400">Installation & Usage</span>
+                        <button class="text-slate-500 hover:text-slate-300 transition-colors" onclick="navigator.clipboard.writeText('npx rnsec scan')">
+                            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path>
+                            </svg>
+                        </button>
+                    </div>
+                    <pre class="text-sm text-slate-300 overflow-x-auto"><code><span class="text-slate-500"># Run directly with npx (no install needed)</span>
+<span class="text-purple-400">npx</span> rnsec scan
+
+<span class="text-slate-500"># Or install globally</span>
+<span class="text-purple-400">npm</span> install -g rnsec
+<span class="text-purple-400">rnsec</span> scan
+
+<span class="text-slate-500"># Install in your project</span>
+<span class="text-purple-400">npm</span> install --save-dev rnsec</code></pre>
+                </div>
+
+                <!-- Output Preview -->
+                <div class="code-block rounded-xl p-6 border border-slate-800/50">
+                    <div class="flex items-center justify-between mb-4">
+                        <span class="text-sm font-semibold text-slate-400">Sample Output</span>
+                        <div class="flex space-x-2">
+                            <span class="w-3 h-3 bg-red-500 rounded-full"></span>
+                            <span class="w-3 h-3 bg-yellow-500 rounded-full"></span>
+                            <span class="w-3 h-3 bg-green-500 rounded-full"></span>
+                        </div>
+                    </div>
+                    <pre class="text-sm overflow-x-auto"><code><span class="text-blue-400">🔍 React Native Security Scan</span>
+
+<span class="text-red-400">🔴 6 High</span> • <span class="text-yellow-400">🟡 15 Medium</span> • <span class="text-blue-300">🔵 21 Low</span>
+
+<span class="text-red-400">HIGH:</span> Sensitive token stored using AsyncStorage
+<span class="text-slate-500">      src/auth/store.ts:42</span>
+
+<span class="text-red-400">HIGH:</span> Android cleartext traffic enabled
+<span class="text-slate-500">      AndroidManifest.xml</span>
+
+<span class="text-yellow-400">MEDIUM:</span> HTTP endpoint detected in fetch()
+<span class="text-slate-500">        src/api/client.ts:18</span>
+
+<span class="text-green-400">✓ Report generated: rnsec-report.html</span></code></pre>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Features Section -->
+    <section id="features" class="py-20 px-4 sm:px-6 lg:px-8">
+        <div class="max-w-7xl mx-auto">
+            <div class="text-center mb-16">
+                <h2 class="text-3xl sm:text-4xl font-bold mb-4">Built for modern mobile development</h2>
+                <p class="text-lg text-slate-400 max-w-2xl mx-auto">
+                    Comprehensive security scanning designed specifically for React Native and Expo applications.
+                </p>
+            </div>
+
+            <div class="grid md:grid-cols-2 lg:grid-cols-4 gap-8">
+                <!-- Feature 1 -->
+                <div class="group p-6 bg-slate-900/50 border border-slate-800 rounded-xl hover:border-purple-500/50 transition-all duration-300 hover:transform hover:scale-105">
+                    <div class="w-12 h-12 bg-purple-500/10 rounded-lg flex items-center justify-center mb-4 group-hover:bg-purple-500/20 transition-colors">
+                        <svg class="w-6 h-6 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"></path>
+                        </svg>
+                    </div>
+                    <h3 class="text-xl font-semibold mb-2">Static Analysis</h3>
+                    <p class="text-slate-400">
+                        Scan JavaScript, TypeScript, config files, AndroidManifest.xml, and Info.plist without building your app.
+                    </p>
+                </div>
+
+                <!-- Feature 2 -->
+                <div class="group p-6 bg-slate-900/50 border border-slate-800 rounded-xl hover:border-blue-500/50 transition-all duration-300 hover:transform hover:scale-105">
+                    <div class="w-12 h-12 bg-blue-500/10 rounded-lg flex items-center justify-center mb-4 group-hover:bg-blue-500/20 transition-colors">
+                        <svg class="w-6 h-6 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path>
+                        </svg>
+                    </div>
+                    <h3 class="text-xl font-semibold mb-2">Security Rules Engine</h3>
+                    <p class="text-slate-400">
+                        20+ rules detecting insecure storage, unsafe network calls, hardcoded secrets, ATS issues, and more.
+                    </p>
+                </div>
+
+                <!-- Feature 3 -->
+                <div class="group p-6 bg-slate-900/50 border border-slate-800 rounded-xl hover:border-green-500/50 transition-all duration-300 hover:transform hover:scale-105">
+                    <div class="w-12 h-12 bg-green-500/10 rounded-lg flex items-center justify-center mb-4 group-hover:bg-green-500/20 transition-colors">
+                        <svg class="w-6 h-6 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+                        </svg>
+                    </div>
+                    <h3 class="text-xl font-semibold mb-2">Beautiful Reports</h3>
+                    <p class="text-slate-400">
+                        CLI and interactive HTML reports with severity filtering, actionable recommendations, and code snippets.
+                    </p>
+                </div>
+
+                <!-- Feature 4 -->
+                <div class="group p-6 bg-slate-900/50 border border-slate-800 rounded-xl hover:border-red-500/50 transition-all duration-300 hover:transform hover:scale-105">
+                    <div class="w-12 h-12 bg-red-500/10 rounded-lg flex items-center justify-center mb-4 group-hover:bg-red-500/20 transition-colors">
+                        <svg class="w-6 h-6 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                        </svg>
+                    </div>
+                    <h3 class="text-xl font-semibold mb-2">Fast & Local</h3>
+                    <p class="text-slate-400">
+                        Lightning-fast scanning with zero data collection. Your code never leaves your machine. Privacy-first by design.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- HTML Report Preview -->
+    <section class="py-20 px-4 sm:px-6 lg:px-8 bg-slate-900/50">
+        <div class="max-w-6xl mx-auto">
+            <div class="text-center mb-12">
+                <h2 class="text-3xl sm:text-4xl font-bold mb-4">Professional Security Reports</h2>
+                <p class="text-lg text-slate-400">Interactive HTML reports with filtering, search, and detailed insights.</p>
+            </div>
+
+            <div class="gradient-border">
+                <div class="gradient-border-content">
+                    <div class="flex items-center justify-between mb-6 pb-4 border-b border-slate-800">
+                        <div>
+                            <h3 class="text-2xl font-bold">Security Analysis Report</h3>
+                            <p class="text-slate-400 text-sm mt-1">Generated December 8, 2025 at 3:42 PM</p>
+                        </div>
+                        <div class="flex space-x-2">
+                            <span class="w-3 h-3 bg-red-500 rounded-full"></span>
+                            <span class="w-3 h-3 bg-yellow-500 rounded-full"></span>
+                            <span class="w-3 h-3 bg-green-500 rounded-full"></span>
+                        </div>
+                    </div>
+
+                    <div class="grid md:grid-cols-3 gap-6 mb-6">
+                        <div class="bg-red-500/10 border border-red-500/30 rounded-lg p-4">
+                            <div class="text-3xl font-bold text-red-400 mb-1">6</div>
+                            <div class="text-sm text-slate-400">High Severity</div>
+                        </div>
+                        <div class="bg-yellow-500/10 border border-yellow-500/30 rounded-lg p-4">
+                            <div class="text-3xl font-bold text-yellow-400 mb-1">15</div>
+                            <div class="text-sm text-slate-400">Medium Severity</div>
+                        </div>
+                        <div class="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4">
+                            <div class="text-3xl font-bold text-blue-400 mb-1">21</div>
+                            <div class="text-sm text-slate-400">Low Severity</div>
+                        </div>
+                    </div>
+
+                    <div class="space-y-4">
+                        <div class="bg-slate-800/50 border border-red-500/30 rounded-lg p-4">
+                            <div class="flex items-start justify-between mb-2">
+                                <div class="flex items-center space-x-2">
+                                    <span class="px-2 py-1 bg-red-500/20 text-red-400 text-xs font-semibold rounded">HIGH</span>
+                                    <span class="font-semibold">ASYNCSTORAGE_SENSITIVE_KEY</span>
+                                </div>
+                                <span class="text-slate-500 text-sm">src/auth/store.ts:42</span>
+                            </div>
+                            <p class="text-slate-400 text-sm mb-2">AsyncStorage storing sensitive key: "user_token"</p>
+                            <p class="text-slate-500 text-xs">💡 Fix: Use encrypted storage like expo-secure-store or react-native-keychain</p>
+                        </div>
+
+                        <div class="bg-slate-800/50 border border-yellow-500/30 rounded-lg p-4">
+                            <div class="flex items-start justify-between mb-2">
+                                <div class="flex items-center space-x-2">
+                                    <span class="px-2 py-1 bg-yellow-500/20 text-yellow-400 text-xs font-semibold rounded">MEDIUM</span>
+                                    <span class="font-semibold">INSECURE_HTTP_URL</span>
+                                </div>
+                                <span class="text-slate-500 text-sm">src/api/client.ts:18</span>
+                            </div>
+                            <p class="text-slate-400 text-sm mb-2">HTTP (non-HTTPS) URL detected</p>
+                            <p class="text-slate-500 text-xs">💡 Fix: Use HTTPS for all network requests</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Why rnsec -->
+    <section id="why" class="py-20 px-4 sm:px-6 lg:px-8">
+        <div class="max-w-4xl mx-auto">
+            <div class="text-center mb-12">
+                <h2 class="text-3xl sm:text-4xl font-bold mb-4">Why rnsec exists</h2>
+            </div>
+
+            <div class="prose prose-invert prose-lg max-w-none">
+                <div class="bg-slate-900/50 border border-slate-800 rounded-xl p-8 space-y-6">
+                    <div>
+                        <h3 class="text-xl font-semibold text-purple-400 mb-2">The Problem</h3>
+                        <p class="text-slate-300 leading-relaxed">
+                            React Native and Expo applications have unique security risks that traditional web security scanners don't address. Mobile apps handle sensitive data, device permissions, native platform configurations, and bridge communications that require specialized analysis.
+                        </p>
+                    </div>
+
+                    <div>
+                        <h3 class="text-xl font-semibold text-blue-400 mb-2">The Gap</h3>
+                        <p class="text-slate-300 leading-relaxed">
+                            While tools exist for web and native iOS/Android security, there's no focused, mobile-first static analysis tool built specifically for the React Native ecosystem. Developers need a scanner that understands AsyncStorage, Expo config files, React Native bridges, and mobile-specific vulnerabilities.
+                        </p>
+                    </div>
+
+                    <div>
+                        <h3 class="text-xl font-semibold text-green-400 mb-2">The Solution</h3>
+                        <p class="text-slate-300 leading-relaxed">
+                            rnsec fills this gap with a modern, open-source scanning engine designed exclusively for React Native and Expo apps. It combines the power of AST-based code analysis with mobile security best practices, delivering actionable insights without the complexity of traditional security tools.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Call to Action -->
+    <section class="py-20 px-4 sm:px-6 lg:px-8 bg-gradient-to-b from-slate-900/50 to-slate-950">
+        <div class="max-w-4xl mx-auto text-center">
+            <h2 class="text-4xl sm:text-5xl font-bold mb-6">
+                Start securing your React Native app today
+            </h2>
+            <p class="text-xl text-slate-400 mb-12 max-w-2xl mx-auto">
+                Join developers building more secure mobile applications with rnsec.
+            </p>
+            
+            <div class="flex flex-col sm:flex-row items-center justify-center gap-4">
+                <a href="#install" class="group w-full sm:w-auto px-8 py-4 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-500 hover:to-blue-500 text-white font-semibold rounded-xl transition-all duration-200 transform hover:scale-105">
+                    <span class="flex items-center justify-center">
+                        Get Started
+                        <svg class="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7l5 5m0 0l-5 5m5-5H6"></path>
+                        </svg>
+                    </span>
+                </a>
+                <a href="https://github.com/yourusername/rnsec" target="_blank" class="w-full sm:w-auto px-8 py-4 bg-slate-800 hover:bg-slate-700 text-white font-semibold rounded-xl border border-slate-700 transition-all duration-200">
+                    <span class="flex items-center justify-center">
+                        <svg class="w-5 h-5 mr-2" fill="currentColor" viewBox="0 0 24 24">
+                            <path fill-rule="evenodd" d="M12 2C6.477 2 2 6.484 2 12.017c0 4.425 2.865 8.18 6.839 9.504.5.092.682-.217.682-.483 0-.237-.008-.868-.013-1.703-2.782.605-3.369-1.343-3.369-1.343-.454-1.158-1.11-1.466-1.11-1.466-.908-.62.069-.608.069-.608 1.003.07 1.531 1.032 1.531 1.032.892 1.53 2.341 1.088 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.113-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.026A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.296 2.747-1.027 2.747-1.027.546 1.379.202 2.398.1 2.651.64.7 1.028 1.595 1.028 2.688 0 3.848-2.339 4.695-4.566 4.943.359.309.678.92.678 1.855 0 1.338-.012 2.419-.012 2.747 0 .268.18.58.688.482A10.019 10.019 0 0022 12.017C22 6.484 17.522 2 12 2z" clip-rule="evenodd"></path>
+                        </svg>
+                        Contribute on GitHub
+                    </span>
+                </a>
+            </div>
+
+            <!-- Stats -->
+            <div class="mt-16 pt-12 border-t border-slate-800 grid grid-cols-3 gap-8">
+                <div>
+                    <div class="text-4xl font-bold gradient-text mb-2">20+</div>
+                    <div class="text-slate-500 text-sm">Security Rules</div>
+                </div>
+                <div>
+                    <div class="text-4xl font-bold gradient-text mb-2">0ms</div>
+                    <div class="text-slate-500 text-sm">Data Collected</div>
+                </div>
+                <div>
+                    <div class="text-4xl font-bold gradient-text mb-2">100%</div>
+                    <div class="text-slate-500 text-sm">Open Source</div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="border-t border-slate-800 py-12 px-4 sm:px-6 lg:px-8">
+        <div class="max-w-7xl mx-auto">
+            <div class="grid md:grid-cols-4 gap-8 mb-8">
+                <div class="md:col-span-2">
+                    <div class="flex items-center space-x-2 mb-4">
+                        <svg class="w-8 h-8 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path>
+                        </svg>
+                        <span class="text-xl font-bold">rnsec</span>
+                    </div>
+                    <p class="text-slate-400 mb-4">
+                        Open-source security scanner for React Native & Expo applications.
+                    </p>
+                    <p class="text-slate-500 text-sm">
+                        Made with ❤️ by <a href="https://github.com/yourusername" target="_blank" class="text-purple-400 hover:text-purple-300 transition-colors">Adnan Sahinović</a>
+                    </p>
+                </div>
+
+                <div>
+                    <h3 class="font-semibold mb-4">Resources</h3>
+                    <ul class="space-y-2 text-slate-400">
+                        <li><a href="#" class="hover:text-white transition-colors">Documentation</a></li>
+                        <li><a href="#" class="hover:text-white transition-colors">API Reference</a></li>
+                        <li><a href="#" class="hover:text-white transition-colors">Examples</a></li>
+                        <li><a href="#" class="hover:text-white transition-colors">Changelog</a></li>
+                    </ul>
+                </div>
+
+                <div>
+                    <h3 class="font-semibold mb-4">Community</h3>
+                    <ul class="space-y-2 text-slate-400">
+                        <li><a href="https://github.com/yourusername/rnsec" target="_blank" class="hover:text-white transition-colors">GitHub</a></li>
+                        <li><a href="#" class="hover:text-white transition-colors">Issues</a></li>
+                        <li><a href="#" class="hover:text-white transition-colors">Discussions</a></li>
+                        <li><a href="#" class="hover:text-white transition-colors">Contributing</a></li>
+                    </ul>
+                </div>
+            </div>
+
+            <div class="pt-8 border-t border-slate-800 flex flex-col md:flex-row justify-between items-center text-slate-500 text-sm">
+                <p>© 2025 rnsec. All rights reserved.</p>
+                <div class="flex items-center space-x-6 mt-4 md:mt-0">
+                    <a href="#" class="hover:text-white transition-colors">MIT License</a>
+                    <a href="#" class="hover:text-white transition-colors">Privacy</a>
+                    <a href="#" class="hover:text-white transition-colors">Terms</a>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+</body>
+</html>
+
