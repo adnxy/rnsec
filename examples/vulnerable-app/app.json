@@ -1,0 +1,22 @@
+{
+  "expo": {
+    "name": "vulnerable-app",
+    "slug": "vulnerable-app",
+    "version": "1.0.0",
+    "android": {
+      "package": "com.example.vulnerableapp",
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.READ_PHONE_STATE",
+        "android.permission.ACCESS_FINE_LOCATION"
+      ]
+    },
+    "ios": {
+      "bundleIdentifier": "com.example.vulnerableapp"
+    }
+  }
+}
+
+
+
+
