@@ -28,14 +28,11 @@ export class HtmlReporter {
     }
     
     body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'SF Pro Display', 'Helvetica Neue', sans-serif;
-      background: #f8f9fa;
+      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', 'Roboto', sans-serif;
+      background: #0a0e1a;
       min-height: 100vh;
-      padding: 0;
-      color: #1a202c;
-      line-height: 1.6;
-      font-weight: 400;
-      letter-spacing: -0.01em;
+      color: #e4e6eb;
+      line-height: 1.5;
       -webkit-font-smoothing: antialiased;
       -moz-osx-font-smoothing: grayscale;
     }
@@ -43,393 +40,315 @@ export class HtmlReporter {
     .container {
       max-width: 1400px;
       margin: 0 auto;
-      background: white;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+      padding: 40px 20px 80px;
     }
     
     .header {
-      background: #0f172a;
-      color: white;
-      padding: 64px 48px 56px;
-      text-align: center;
-      position: relative;
-      border-bottom: 3px solid #dc2626;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 32px;
+      padding: 0 8px;
     }
     
     .header h1 {
-      font-size: 48px;
-      margin-bottom: 16px;
-      font-weight: 700;
-      letter-spacing: -0.02em;
-      color: white;
+      font-size: 32px;
+      font-weight: 600;
+      color: #ffffff;
+      letter-spacing: -0.5px;
     }
-    
-    .header .subtitle {
-      font-size: 20px;
-      font-weight: 500;
-      color: rgba(255,255,255,0.9);
-      margin-bottom: 16px;
-      letter-spacing: -0.01em;
-    }
-    
-    .header p {
+
+    .sample-badge {
+      background: rgba(59, 130, 246, 0.1);
+      border: 1px solid rgba(59, 130, 246, 0.3);
+      color: #60a5fa;
+      padding: 8px 16px;
+      border-radius: 8px;
       font-size: 14px;
-      color: rgba(255,255,255,0.75);
-      margin-top: 12px;
-      font-weight: 400;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
+      font-weight: 500;
     }
     
     .summary {
       display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 0;
-      background: white;
-      border-bottom: 1px solid #e2e8f0;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 1px;
+      background: #1a1f2e;
+      border: 1px solid #1a1f2e;
+      border-radius: 12px;
+      overflow: hidden;
+      margin-bottom: 32px;
     }
     
     .summary-card {
-      background: white;
-      padding: 40px 32px;
+      background: #141824;
+      padding: 48px 32px;
       text-align: center;
-      transition: all 0.25s ease;
-      position: relative;
-      border-right: 1px solid #e2e8f0;
+      transition: all 0.3s ease;
+      border-right: 1px solid #1a1f2e;
     }
-    
+
     .summary-card:last-child {
       border-right: none;
     }
     
     .summary-card:hover {
-      background: #f7fafc;
-      transform: translateY(-2px);
-    }
-    
-    .summary-card h3 {
-      font-size: 11px;
-      text-transform: uppercase;
-      letter-spacing: 1.2px;
-      color: #718096;
-      margin-bottom: 12px;
-      font-weight: 700;
+      background: #1a1f2e;
     }
     
     .summary-card .number {
-      font-size: 56px;
-      font-weight: 800;
+      font-size: 64px;
+      font-weight: 700;
       line-height: 1;
-      letter-spacing: -0.02em;
+      letter-spacing: -2px;
+      margin-bottom: 12px;
     }
     
-    .summary-card.high .number { color: #dc2626; }
-    .summary-card.medium .number { color: #ea580c; }
-    .summary-card.low .number { color: #2563eb; }
-    .summary-card.total .number { color: #0f172a; }
+    .summary-card.high .number { color: #ef4444; }
+    .summary-card.medium .number { color: #f97316; }
+    .summary-card.low .number { color: #eab308; }
     
-    .filters {
-      padding: 24px 48px;
-      background: #f8f9fa;
-      border-bottom: 1px solid #e2e8f0;
-      display: flex;
-      gap: 12px;
-      flex-wrap: wrap;
-      position: sticky;
-      top: 0;
-      z-index: 100;
-      backdrop-filter: saturate(180%) blur(20px);
-      background: rgba(248,249,250,0.95);
-    }
-    
-    .filter-btn {
-      padding: 10px 20px;
-      border: 1.5px solid #cbd5e0;
-      background: white;
-      border-radius: 8px;
-      cursor: pointer;
-      font-size: 13px;
-      font-weight: 600;
-      transition: all 0.2s ease;
-      color: #475569;
-      letter-spacing: 0.3px;
-    }
-    
-    .filter-btn:hover {
-      background: white;
-      border-color: #0f172a;
-      color: #0f172a;
-      box-shadow: 0 2px 8px rgba(15,23,42,0.15);
-    }
-    
-    .filter-btn.active {
-      background: #0f172a;
-      color: white;
-      border-color: #0f172a;
-      box-shadow: 0 4px 12px rgba(15,23,42,0.3);
+    .summary-card h3 {
+      font-size: 14px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: #9ca3af;
+      font-weight: 500;
     }
     
     .findings {
-      padding: 48px 48px 80px;
-      background: #f8f9fa;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
     }
     
     .finding {
-      background: white;
-      border: 1px solid #e2e8f0;
+      background: #141824;
+      border: 1px solid #1f2937;
       border-radius: 12px;
-      padding: 28px 32px;
-      margin-bottom: 20px;
-      transition: all 0.25s ease;
-      position: relative;
-    }
-    
-    .finding::before {
-      content: '';
-      position: absolute;
-      left: 0;
-      top: 0;
-      bottom: 0;
-      width: 4px;
-      border-radius: 12px 0 0 12px;
+      overflow: hidden;
+      transition: all 0.2s ease;
+      cursor: pointer;
     }
     
     .finding:hover {
-      box-shadow: 0 8px 24px rgba(0,0,0,0.08);
-      transform: translateY(-2px);
-      border-color: #cbd5e0;
-    }
-    
-    .finding.high::before {
-      background: linear-gradient(180deg, #dc2626 0%, #ef4444 100%);
-    }
-    
-    .finding.medium::before {
-      background: linear-gradient(180deg, #ea580c 0%, #f97316 100%);
-    }
-    
-    .finding.low::before {
-      background: linear-gradient(180deg, #2563eb 0%, #3b82f6 100%);
+      border-color: #374151;
+      background: #1a1f2e;
     }
     
     .finding-header {
       display: flex;
       justify-content: space-between;
-      align-items: flex-start;
-      margin-bottom: 16px;
-      padding-left: 20px;
+      align-items: center;
+      padding: 24px 28px;
+      gap: 20px;
     }
     
-    .finding-title {
-      font-size: 18px;
-      font-weight: 700;
-      color: #0f172a;
-      margin-bottom: 8px;
-      letter-spacing: -0.01em;
+    .finding-left {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex: 1;
+      min-width: 0;
     }
     
     .severity-badge {
-      padding: 6px 14px;
+      padding: 6px 12px;
       border-radius: 6px;
-      font-size: 10px;
+      font-size: 11px;
       font-weight: 700;
       text-transform: uppercase;
-      letter-spacing: 0.8px;
+      letter-spacing: 0.5px;
+      white-space: nowrap;
+      flex-shrink: 0;
     }
     
     .severity-badge.high {
-      background: #dc2626;
-      color: white;
+      background: rgba(239, 68, 68, 0.15);
+      color: #ef4444;
+      border: 1px solid rgba(239, 68, 68, 0.3);
     }
     
     .severity-badge.medium {
-      background: #ea580c;
-      color: white;
+      background: rgba(249, 115, 22, 0.15);
+      color: #f97316;
+      border: 1px solid rgba(249, 115, 22, 0.3);
     }
     
     .severity-badge.low {
-      background: #2563eb;
-      color: white;
+      background: rgba(234, 179, 8, 0.15);
+      color: #eab308;
+      border: 1px solid rgba(234, 179, 8, 0.3);
+    }
+    
+    .finding-title {
+      font-size: 16px;
+      font-weight: 500;
+      color: #f3f4f6;
+      letter-spacing: -0.2px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    
+    .expand-icon {
+      color: #6b7280;
+      transition: transform 0.3s ease;
+      flex-shrink: 0;
+      width: 20px;
+      height: 20px;
+    }
+    
+    .finding.expanded .expand-icon {
+      transform: rotate(90deg);
+    }
+    
+    .finding-content {
+      max-height: 0;
+      overflow: hidden;
+      transition: max-height 0.3s ease;
+      border-top: 1px solid transparent;
+    }
+    
+    .finding.expanded .finding-content {
+      max-height: 2000px;
+      border-top-color: #1f2937;
+    }
+    
+    .finding-content-inner {
+      padding: 24px 28px;
     }
     
     .finding-description {
-      color: #86868b;
-      margin-bottom: 16px;
-      line-height: 1.52947;
-      font-size: 17px;
+      color: #9ca3af;
+      font-size: 15px;
+      line-height: 1.6;
+      margin-bottom: 20px;
     }
     
     .finding-location {
       display: flex;
       align-items: center;
       gap: 10px;
-      color: #64748b;
+      color: #6b7280;
       font-size: 13px;
       margin-bottom: 20px;
-      margin-left: 20px;
       font-family: 'SF Mono', 'Monaco', 'Menlo', monospace;
-      font-weight: 400;
     }
     
     .finding-location svg {
       width: 16px;
       height: 16px;
-      color: #94a3b8;
+      flex-shrink: 0;
     }
     
     .code-snippet {
-      background: #1e293b;
-      border: 1px solid #334155;
-      padding: 20px 24px;
-      border-radius: 10px;
-      margin: 20px 0;
+      background: #0d1117;
+      border: 1px solid #1f2937;
+      padding: 16px 20px;
+      border-radius: 8px;
+      margin-bottom: 20px;
       overflow-x: auto;
     }
     
     .code-snippet pre {
       font-family: 'SF Mono', 'Menlo', 'Monaco', 'Courier New', monospace;
       font-size: 13px;
-      line-height: 1.7;
-      color: #e2e8f0;
+      line-height: 1.6;
+      color: #e4e6eb;
     }
     
     .suggestion {
-      background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
-      border-left: 4px solid #10b981;
-      padding: 20px 24px;
-      border-radius: 10px;
-      margin-top: 20px;
-      border: 1px solid #a7f3d0;
+      background: rgba(34, 197, 94, 0.08);
+      border: 1px solid rgba(34, 197, 94, 0.2);
+      border-left: 3px solid #22c55e;
+      padding: 16px 20px;
+      border-radius: 8px;
     }
     
     .suggestion-title {
-      font-weight: 700;
-      color: #065f46;
+      font-weight: 600;
+      color: #22c55e;
       margin-bottom: 8px;
-      font-size: 14px;
+      font-size: 13px;
       display: flex;
       align-items: center;
       gap: 8px;
     }
     
-    .suggestion-title::before {
-      content: '💡';
-      font-size: 16px;
-    }
-    
     .suggestion-text {
-      color: #047857;
-      line-height: 1.7;
-      font-size: 14px;
-    }
-    
-    .footer {
-      background: #f8f9fa;
-      padding: 48px 48px;
-      text-align: center;
-      color: #64748b;
-      border-top: 1px solid #e2e8f0;
-    }
-    
-    .footer .logo {
-      font-size: 28px;
-      font-weight: 800;
-      margin-bottom: 16px;
-      color: #0f172a;
-      letter-spacing: -0.02em;
-    }
-    
-    .footer p {
-      margin-bottom: 8px;
-      font-size: 13px;
+      color: #9ca3af;
       line-height: 1.6;
-    }
-    
-    .footer strong {
-      color: #0f172a;
-      font-weight: 600;
+      font-size: 14px;
     }
     
     .no-findings {
       text-align: center;
       padding: 120px 40px;
-      background: white;
+      background: #141824;
+      border-radius: 12px;
+      border: 1px solid #1f2937;
     }
     
     .no-findings svg {
-      width: 96px;
-      height: 96px;
-      margin-bottom: 24px;
-      color: #34c759;
+      width: 64px;
+      height: 64px;
+      margin-bottom: 20px;
+      color: #22c55e;
     }
     
     .no-findings h2 {
-      font-size: 40px;
+      font-size: 28px;
       margin-bottom: 12px;
       font-weight: 600;
-      color: #1d1d1f;
-      letter-spacing: -0.03em;
+      color: #f3f4f6;
     }
     
     .no-findings p {
-      font-size: 19px;
-      color: #86868b;
-      font-weight: 400;
+      font-size: 16px;
+      color: #9ca3af;
     }
-    
-    .section-title {
-      font-size: 28px;
-      font-weight: 600;
-      color: #1d1d1f;
-      margin: 40px 0 24px;
-      letter-spacing: -0.03em;
-      padding-left: 40px;
-      background: white;
+
+    .footer {
+      text-align: center;
+      margin-top: 48px;
       padding-top: 32px;
+      border-top: 1px solid #1f2937;
+      color: #6b7280;
+      font-size: 13px;
     }
-    
-    @media print {
-      body {
-        background: white;
-        padding: 0;
-      }
-      
-      .container {
-        box-shadow: none;
-      }
-      
-      .filters {
-        display: none;
-      }
-      
-      .finding {
-        break-inside: avoid;
-      }
+
+    .footer .logo {
+      font-size: 20px;
+      font-weight: 700;
+      margin-bottom: 12px;
+      color: #f3f4f6;
+      letter-spacing: -0.5px;
     }
     
     @media (max-width: 768px) {
-      .header h1 {
-        font-size: 48px;
-      }
-      
-      .header .subtitle {
-        font-size: 21px;
-      }
-      
       .summary {
-        grid-template-columns: 1fr 1fr;
+        grid-template-columns: 1fr;
+      }
+
+      .summary-card {
+        border-right: none;
+        border-bottom: 1px solid #1a1f2e;
+      }
+
+      .summary-card:last-child {
+        border-bottom: none;
       }
       
-      .summary-card .number {
-        font-size: 56px;
+      .finding-header {
+        padding: 20px;
+      }
+
+      .finding-content-inner {
+        padding: 20px;
       }
       
-      .findings {
-        padding: 24px 20px 40px;
-      }
-      
-      .finding {
-        padding: 24px 20px;
+      .finding-title {
+        font-size: 14px;
       }
     }
   </style>
@@ -437,38 +356,26 @@ export class HtmlReporter {
 <body>
   <div class="container">
     <div class="header">
-      <h1>React Native Security Report</h1>
-      <p class="subtitle">Static Security Analysis</p>
-      <p>Generated ${result.timestamp.toLocaleDateString()} at ${result.timestamp.toLocaleTimeString()}</p>
+      <h1>Security Analysis Report</h1>
+      <div class="sample-badge">Sample</div>
     </div>
     
     <div class="summary">
       <div class="summary-card high">
-        <h3>High Severity</h3>
         <div class="number">${high.length}</div>
+        <h3>High</h3>
       </div>
       <div class="summary-card medium">
-        <h3>Medium Severity</h3>
         <div class="number">${medium.length}</div>
+        <h3>Medium</h3>
       </div>
       <div class="summary-card low">
-        <h3>Low Severity</h3>
         <div class="number">${low.length}</div>
-      </div>
-      <div class="summary-card total">
-        <h3>Total Issues</h3>
-        <div class="number">${findings.length}</div>
+        <h3>Low</h3>
       </div>
     </div>
     
     ${findings.length > 0 ? `
-    <div class="filters">
-      <button class="filter-btn active" onclick="filterFindings('all')">All (${findings.length})</button>
-      <button class="filter-btn" onclick="filterFindings('high')">High (${high.length})</button>
-      <button class="filter-btn" onclick="filterFindings('medium')">Medium (${medium.length})</button>
-      <button class="filter-btn" onclick="filterFindings('low')">Low (${low.length})</button>
-    </div>
-    
     <div class="findings">
       ${this.renderFindings(high, 'HIGH')}
       ${this.renderFindings(medium, 'MEDIUM')}
@@ -483,33 +390,31 @@ export class HtmlReporter {
       <p>Your React Native app passed all security checks.</p>
     </div>
     `}
-    
+
     <div class="footer">
       <div class="logo">rnsec</div>
-      <p><strong>Scan Details:</strong> ${result.scannedFiles || 'N/A'} files scanned in ${(result.duration / 1000).toFixed(2)}s</p>
       <p>React Native & Expo Security Scanner</p>
-      <p style="margin-top: 16px; font-size: 12px; opacity: 0.6;">
-        Professional-grade static analysis for mobile applications
+      <p style="margin-top: 8px; opacity: 0.6;">
+        Scanned ${result.scannedFiles || 'N/A'} files in ${(result.duration / 1000).toFixed(2)}s · ${result.timestamp.toLocaleString()}
       </p>
     </div>
   </div>
   
   <script>
-    function filterFindings(severity) {
-      const findings = document.querySelectorAll('.finding');
-      const buttons = document.querySelectorAll('.filter-btn');
-      
-      buttons.forEach(btn => btn.classList.remove('active'));
-      event.target.classList.add('active');
-      
-      findings.forEach(finding => {
-        if (severity === 'all' || finding.classList.contains(severity)) {
-          finding.style.display = 'block';
-        } else {
-          finding.style.display = 'none';
-        }
-      });
+    function toggleFinding(element) {
+      element.classList.toggle('expanded');
     }
+
+    // Add click handlers to all findings
+    document.querySelectorAll('.finding').forEach(finding => {
+      finding.addEventListener('click', function(e) {
+        // Don't toggle if clicking on code snippet or links
+        if (e.target.closest('.code-snippet') || e.target.tagName === 'A') {
+          return;
+        }
+        toggleFinding(this);
+      });
+    });
   </script>
 </body>
 </html>`;
@@ -519,34 +424,44 @@ export class HtmlReporter {
     return findings.map((finding, index) => `
       <div class="finding ${severityLabel.toLowerCase()}" data-severity="${severityLabel.toLowerCase()}">
         <div class="finding-header">
-          <div>
-            <div class="finding-title">${finding.ruleId}</div>
-            <div class="finding-description">${this.escapeHtml(finding.description)}</div>
+          <div class="finding-left">
+            <span class="severity-badge ${severityLabel.toLowerCase()}">${severityLabel}</span>
+            <div class="finding-title">${this.escapeHtml(finding.description || finding.ruleId)}</div>
           </div>
-          <span class="severity-badge ${severityLabel.toLowerCase()}">${severityLabel}</span>
-        </div>
-        
-        <div class="finding-location">
-          <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+          <svg class="expand-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
           </svg>
-          <span>${this.escapeHtml(finding.filePath)}${finding.line ? ':' + finding.line : ''}</span>
         </div>
         
-        ${finding.snippet ? `
-        <div class="code-snippet">
-          <pre>${this.escapeHtml(finding.snippet)}</pre>
-        </div>
-        ` : ''}
-        
-        ${finding.suggestion ? `
-        <div class="suggestion">
-          <div class="suggestion-title">
-            💡 Recommendation
+        <div class="finding-content">
+          <div class="finding-content-inner">
+            ${finding.description && finding.description !== finding.ruleId ? `
+              <div class="finding-description">${this.escapeHtml(finding.description)}</div>
+            ` : ''}
+            
+            <div class="finding-location">
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+              </svg>
+              <span>${this.escapeHtml(finding.filePath)}${finding.line ? ':' + finding.line : ''}</span>
+            </div>
+            
+            ${finding.snippet ? `
+            <div class="code-snippet">
+              <pre>${this.escapeHtml(finding.snippet)}</pre>
+            </div>
+            ` : ''}
+            
+            ${finding.suggestion ? `
+            <div class="suggestion">
+              <div class="suggestion-title">
+                💡 Recommendation
+              </div>
+              <div class="suggestion-text">${this.escapeHtml(finding.suggestion)}</div>
+            </div>
+            ` : ''}
           </div>
-          <div class="suggestion-text">${this.escapeHtml(finding.suggestion)}</div>
         </div>
-        ` : ''}
       </div>
     `).join('');
   }
@@ -562,4 +477,3 @@ export class HtmlReporter {
     return text.replace(/[&<>"']/g, m => map[m]);
   }
 }
-
