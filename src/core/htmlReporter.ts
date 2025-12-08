@@ -58,19 +58,21 @@ export class HtmlReporter {
       letter-spacing: -0.5px;
     }
 
-    .sample-badge {
-      background: rgba(59, 130, 246, 0.1);
-      border: 1px solid rgba(59, 130, 246, 0.3);
-      color: #60a5fa;
-      padding: 8px 16px;
-      border-radius: 8px;
+    .header-info {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      color: #9ca3af;
       font-size: 14px;
-      font-weight: 500;
+    }
+
+    .info-divider {
+      opacity: 0.5;
     }
     
     .summary {
       display: grid;
-      grid-template-columns: repeat(3, 1fr);
+      grid-template-columns: repeat(4, 1fr);
       gap: 1px;
       background: #1a1f2e;
       border: 1px solid #1a1f2e;
@@ -85,6 +87,8 @@ export class HtmlReporter {
       text-align: center;
       transition: all 0.3s ease;
       border-right: 1px solid #1a1f2e;
+      cursor: pointer;
+      position: relative;
     }
 
     .summary-card:last-child {
@@ -93,6 +97,22 @@ export class HtmlReporter {
     
     .summary-card:hover {
       background: #1a1f2e;
+      transform: translateY(-2px);
+    }
+
+    .summary-card.active {
+      background: #1f2937;
+      box-shadow: inset 0 0 0 2px rgba(59, 130, 246, 0.3);
+    }
+
+    .summary-card.active::after {
+      content: '';
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      background: linear-gradient(90deg, #3b82f6, #60a5fa);
     }
     
     .summary-card .number {
@@ -106,6 +126,7 @@ export class HtmlReporter {
     .summary-card.high .number { color: #ef4444; }
     .summary-card.medium .number { color: #f97316; }
     .summary-card.low .number { color: #eab308; }
+    .summary-card.total .number { color: #60a5fa; }
     
     .summary-card h3 {
       font-size: 14px;
@@ -325,7 +346,19 @@ export class HtmlReporter {
       letter-spacing: -0.5px;
     }
     
+    @media (max-width: 1024px) {
+      .summary {
+        grid-template-columns: repeat(2, 1fr);
+      }
+    }
+
     @media (max-width: 768px) {
+      .header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 12px;
+      }
+
       .summary {
         grid-template-columns: 1fr;
       }
@@ -333,10 +366,15 @@ export class HtmlReporter {
       .summary-card {
         border-right: none;
         border-bottom: 1px solid #1a1f2e;
+        padding: 36px 24px;
       }
 
       .summary-card:last-child {
         border-bottom: none;
+      }
+
+      .summary-card .number {
+        font-size: 48px;
       }
       
       .finding-header {
@@ -357,21 +395,29 @@ export class HtmlReporter {
   <div class="container">
     <div class="header">
       <h1>Security Analysis Report</h1>
-      <div class="sample-badge">Sample</div>
+      <div class="header-info">
+        <div class="info-item">v1.0.0</div>
+        <div class="info-divider">•</div>
+        <div class="info-item">${result.timestamp.toLocaleDateString()} ${result.timestamp.toLocaleTimeString()}</div>
+      </div>
     </div>
     
     <div class="summary">
-      <div class="summary-card high">
+      <div class="summary-card high" onclick="filterBySeverity('high')" data-filter="high">
         <div class="number">${high.length}</div>
         <h3>High</h3>
       </div>
-      <div class="summary-card medium">
+      <div class="summary-card medium" onclick="filterBySeverity('medium')" data-filter="medium">
         <div class="number">${medium.length}</div>
         <h3>Medium</h3>
       </div>
-      <div class="summary-card low">
+      <div class="summary-card low" onclick="filterBySeverity('low')" data-filter="low">
         <div class="number">${low.length}</div>
         <h3>Low</h3>
+      </div>
+      <div class="summary-card total active" onclick="filterBySeverity('all')" data-filter="all">
+        <div class="number">${findings.length}</div>
+        <h3>Total</h3>
       </div>
     </div>
     
@@ -401,8 +447,42 @@ export class HtmlReporter {
   </div>
   
   <script>
+    let currentFilter = 'all';
+
     function toggleFinding(element) {
       element.classList.toggle('expanded');
+    }
+
+    function filterBySeverity(severity) {
+      currentFilter = severity;
+      const findings = document.querySelectorAll('.finding');
+      const cards = document.querySelectorAll('.summary-card');
+      
+      // Update active state on cards
+      cards.forEach(card => {
+        if (card.dataset.filter === severity) {
+          card.classList.add('active');
+        } else {
+          card.classList.remove('active');
+        }
+      });
+      
+      // Filter findings
+      findings.forEach(finding => {
+        if (severity === 'all') {
+          finding.style.display = 'block';
+        } else if (finding.classList.contains(severity)) {
+          finding.style.display = 'block';
+        } else {
+          finding.style.display = 'none';
+        }
+      });
+
+      // Scroll to findings section smoothly
+      const findingsSection = document.querySelector('.findings');
+      if (findingsSection && severity !== 'all') {
+        findingsSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
     }
 
     // Add click handlers to all findings
