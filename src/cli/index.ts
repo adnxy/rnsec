@@ -17,6 +17,10 @@ import { authenticationRules } from '../scanners/authenticationScanner.js';
 import { cryptoRules } from '../scanners/cryptoScanner.js';
 import { reactNativeRules } from '../scanners/reactNativeScanner.js';
 import { webviewRules } from '../scanners/webviewScanner.js';
+import { secretsRules } from '../scanners/secretsScanner.js';
+import { debugRules } from '../scanners/debugScanner.js';
+import { androidRules } from '../scanners/androidScanner.js';
+import { iosRules } from '../scanners/iosScanner.js';
 import type { ScanResult } from '../types/findings.js';
 
 const securityGradient = gradient(['#ff0000', '#ff6b6b', '#ff8888']);
@@ -63,6 +67,10 @@ program
       engine.registerRuleGroup(cryptoRules);
       engine.registerRuleGroup(reactNativeRules);
       engine.registerRuleGroup(webviewRules);
+      engine.registerRuleGroup(secretsRules);
+      engine.registerRuleGroup(debugRules);
+      engine.registerRuleGroup(androidRules);
+      engine.registerRuleGroup(iosRules);
 
       if (spinner) {
         spinner.succeed(chalk.green('Security rules loaded'));
@@ -168,6 +176,10 @@ program
     engine.registerRuleGroup(cryptoRules);
     engine.registerRuleGroup(reactNativeRules);
     engine.registerRuleGroup(webviewRules);
+    engine.registerRuleGroup(secretsRules);
+    engine.registerRuleGroup(debugRules);
+    engine.registerRuleGroup(androidRules);
+    engine.registerRuleGroup(iosRules);
 
     const rules = engine.getAllRules();
     const reporter = new Reporter();
