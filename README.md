@@ -1,32 +1,26 @@
 # rnsec
 
-<p align="center">
-  <strong>🔒 Professional Security Scanner for React Native & Expo</strong>
-</p>
+**🔒 Security Scanner for React Native & Expo**
+
+Find vulnerabilities in your mobile app with zero configuration.  
+62 security rules • 27+ API key patterns • Android & iOS specific checks
 
 <p align="center">
-  Static analysis tool detecting 62+ security vulnerabilities in mobile applications
-</p>
-
-<p align="center">
-  <a href="#installation">Installation</a> •
   <a href="#quick-start">Quick Start</a> •
   <a href="#security-checks">Security Checks</a> •
   <a href="#cicd-integration">CI/CD</a> •
-  <a href="#contributing">Contributing</a>
+  <a href="#examples">Examples</a>
 </p>
 
 ---
 
 ## Why rnsec?
 
-**Comprehensive Coverage**: 62 security rules across 13 categories including storage, network, authentication, cryptography, and platform-specific vulnerabilities.
-
-**API Key Detection**: Automatically identifies 27+ types of exposed secrets (Firebase, AWS, Stripe, GitHub, Slack, etc.)
-
-**Platform-Specific**: Dedicated scanners for Android (AndroidManifest.xml) and iOS (Info.plist) with 14+ mobile-specific checks.
-
-**Production Ready**: Zero configuration, fast scanning, and multiple output formats for development and CI/CD workflows.
+- **🎯 Simple**: One command, instant results
+- **📊 Comprehensive**: 62 security rules across 13 categories  
+- **🔑 Smart**: Detects 27+ types of exposed API keys and secrets
+- **📱 Mobile-Ready**: Android & iOS platform-specific checks
+- **⚡ Fast**: Scans entire projects in seconds
 
 ## Installation
 
@@ -34,11 +28,13 @@
 npm install -g rnsec
 ```
 
+Or install from source:
+
 <details>
-<summary>Install from source</summary>
+<summary>Build from source</summary>
 
 ```bash
-git clone https://github.com/yourusername/rnsec.git
+git clone https://github.com/adnxy/rnsec.git
 cd rnsec
 npm install
 npm run build
@@ -48,43 +44,83 @@ npm link
 
 ## Quick Start
 
+### 1. Run Scan
 ```bash
-# Scan your project
 rnsec scan
+```
 
-# Generate interactive HTML report
-rnsec scan --html report.html
+### 2. Get Results
+Automatically generated:
+-  **`rnsec-report.html`** - Interactive web dashboard
+-  **`rnsec-report.json`** - Data for CI/CD pipelines
+-  **Console output** - Instant summary
 
-# View all available rules
-rnsec rules
+### 3. Review Findings
+```bash
+open rnsec-report.html    # View in browser
 ```
 
 ## Usage
 
-### Command Line Options
+### Default Behavior
+
+By default, `rnsec scan` generates **both reports automatically**:
+- `rnsec-report.html` - Interactive web report with filtering
+- `rnsec-report.json` - Machine-readable results
+
+```bash
+# Scan current directory
+rnsec scan
+
+# Scan specific project
+rnsec scan --path ./my-react-native-app
+```
+
+### Custom Output
+
+```bash
+# Custom HTML filename
+rnsec scan --html my-security-report.html
+
+# Custom JSON filename  
+rnsec scan --output results.json
+
+# Both custom filenames
+rnsec scan --html report.html --output data.json
+
+# Console output only (no files)
+rnsec scan --json
+
+# Silent mode (minimal output)
+rnsec scan --silent
+```
+
+### CI/CD Mode
+
+```bash
+# Generate JSON for CI/CD pipeline
+rnsec scan --output security-results.json --silent
+```
+
+### View All Rules
+
+```bash
+# List all 62 security rules
+rnsec rules
+```
+
+### Command Reference
 
 ```bash
 rnsec scan [options]
 
 Options:
-  -p, --path <path>        Path to project root (default: ".")
-  --json                   Output results as JSON
-  --html <filename>        Generate HTML report
-  --output <filename>      Save JSON results to file
+  -p, --path <path>        Project directory (default: current directory)
+  --html <filename>        Custom HTML report filename
+  --output <filename>      Custom JSON report filename
+  --json                   Console JSON output only (no files)
   --silent                 Suppress console output
-```
-
-### Examples
-
-```bash
-# Scan current directory with HTML report
-rnsec scan --html security-report.html
-
-# Scan specific project with JSON output
-rnsec scan --path ./my-app --json
-
-# Generate report for CI/CD
-rnsec scan --output results.json --silent
+  -h, --help              Show help
 ```
 
 ## Security Checks
@@ -238,6 +274,26 @@ The `API_KEY_EXPOSED` rule detects 27+ types of exposed secrets:
 **Cryptographic**: Private Keys (RSA, SSH, PGP), Certificates  
 **Authentication**: JWT, Bearer Tokens, Basic Auth, OAuth Client Secrets
 
+## Examples
+
+Test the scanner with included sample projects:
+
+```bash
+# Scan vulnerable app (35+ security issues)
+rnsec scan --path examples/vulnerable-app
+
+# Scan secure app (minimal issues)
+rnsec scan --path examples/secure-app
+
+# Scan and open HTML report
+rnsec scan --path examples/vulnerable-app
+open rnsec-report.html  # macOS
+# or
+start rnsec-report.html  # Windows
+# or
+xdg-open rnsec-report.html  # Linux
+```
+
 ## CI/CD Integration
 
 ### GitHub Actions
@@ -253,29 +309,20 @@ jobs:
       - uses: actions/checkout@v3
       - uses: actions/setup-node@v3
       - run: npm install -g rnsec
-      - run: rnsec scan --output security-results.json
+      - run: rnsec scan --output security-results.json --silent
       - uses: actions/upload-artifact@v3
+        if: always()
         with:
           name: security-report
-          path: security-results.json
+          path: |
+            security-results.json
+            rnsec-report.html
 ```
 
 ### Exit Codes
 
-- `0`: No high-severity issues found
-- `1`: High-severity vulnerabilities detected (fails CI/CD)
-
-## Examples
-
-Test the scanner with sample projects in the `examples/` directory:
-
-```bash
-# Scan vulnerable app (35+ issues)
-rnsec scan examples/vulnerable-app --html vulnerable-report.html
-
-# Scan secure app (minimal issues)
-rnsec scan examples/secure-app --html secure-report.html
-```
+- `0` - No high-severity issues (passes CI/CD)
+- `1` - High-severity vulnerabilities detected (fails CI/CD)
 
 ## Contributing
 
