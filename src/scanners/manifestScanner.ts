@@ -1,16 +1,7 @@
-/**
- * Manifest security scanner
- * Detects insecure configuration in AndroidManifest.xml and Info.plist
- */
-
 import type { Rule, RuleContext, RuleGroup } from '../types/ruleTypes.js';
 import { Severity, type Finding } from '../types/findings.js';
 import { RuleCategory } from '../types/ruleTypes.js';
 
-/**
- * Rule: ANDROID_CLEARTEXT_ENABLED
- * Detects cleartext traffic enabled in AndroidManifest.xml
- */
 const androidCleartextEnabledRule: Rule = {
   id: 'ANDROID_CLEARTEXT_ENABLED',
   description: 'Android cleartext traffic is enabled',
@@ -23,7 +14,6 @@ const androidCleartextEnabledRule: Rule = {
       return findings;
     }
 
-    // Check for usesCleartextTraffic="true"
     if (context.xmlContent.includes('android:usesCleartextTraffic="true"')) {
       findings.push({
         ruleId: 'ANDROID_CLEARTEXT_ENABLED',
@@ -38,10 +28,6 @@ const androidCleartextEnabledRule: Rule = {
   },
 };
 
-/**
- * Rule: IOS_ATS_DISABLED
- * Detects App Transport Security disabled in Info.plist
- */
 const iosAtsDisabledRule: Rule = {
   id: 'IOS_ATS_DISABLED',
   description: 'iOS App Transport Security (ATS) is disabled',
@@ -54,7 +40,6 @@ const iosAtsDisabledRule: Rule = {
       return findings;
     }
 
-    // Check for NSAllowsArbitraryLoads set to true
     const atsPattern = /<key>NSAppTransportSecurity<\/key>\s*<dict>[\s\S]*?<key>NSAllowsArbitraryLoads<\/key>\s*<true\/>/;
     
     if (atsPattern.test(context.plistContent)) {
@@ -75,6 +60,3 @@ export const manifestRules: RuleGroup = {
   category: RuleCategory.MANIFEST,
   rules: [androidCleartextEnabledRule, iosAtsDisabledRule],
 };
-
-
-

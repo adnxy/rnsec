@@ -1,16 +1,7 @@
-/**
- * Configuration security scanner
- * Detects insecure configuration in Expo and React Native config files
- */
-
 import type { Rule, RuleContext, RuleGroup } from '../types/ruleTypes.js';
 import { Severity, type Finding } from '../types/findings.js';
 import { RuleCategory } from '../types/ruleTypes.js';
 
-/**
- * Rule: EXPO_INSECURE_PERMISSIONS
- * Detects potentially dangerous permissions in app.json
- */
 const expoInsecurePermissionsRule: Rule = {
   id: 'EXPO_INSECURE_PERMISSIONS',
   description: 'Potentially dangerous permissions detected in Expo config',
@@ -23,7 +14,6 @@ const expoInsecurePermissionsRule: Rule = {
       return findings;
     }
 
-    // Check for overly broad permissions
     const dangerousPermissions = [
       'android.permission.READ_PHONE_STATE',
       'android.permission.ACCESS_FINE_LOCATION',
@@ -55,4 +45,3 @@ export const configRules: RuleGroup = {
   category: RuleCategory.CONFIG,
   rules: [expoInsecurePermissionsRule],
 };
-
