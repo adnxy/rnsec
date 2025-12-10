@@ -1,20 +1,10 @@
-/**
- * Network security scanner
- * Detects insecure network patterns
- */
-
 import _traverse from '@babel/traverse';
-// Handle ESM/CommonJS interop
 const traverse = (_traverse as any).default || _traverse;
 import type { Rule, RuleContext, RuleGroup } from '../types/ruleTypes.js';
 import { Severity, type Finding } from '../types/findings.js';
 import { getLineNumber, extractSnippet } from '../utils/stringUtils.js';
 import { RuleCategory } from '../types/ruleTypes.js';
 
-/**
- * Rule: INSECURE_HTTP_URL
- * Detects HTTP (non-HTTPS) URLs in network calls
- */
 const insecureHttpUrlRule: Rule = {
   id: 'INSECURE_HTTP_URL',
   description: 'Insecure HTTP URLs detected in network requests',
@@ -31,7 +21,6 @@ const insecureHttpUrlRule: Rule = {
       CallExpression(path: any) {
         const { node } = path;
         
-        // Check for fetch() calls
         if (node.callee.type === 'Identifier' && node.callee.name === 'fetch') {
           const urlArg = node.arguments[0];
           
@@ -54,7 +43,6 @@ const insecureHttpUrlRule: Rule = {
           }
         }
         
-        // Check for axios calls
         if (
           node.callee.type === 'MemberExpression' &&
           node.callee.object.type === 'Identifier' &&
@@ -82,7 +70,6 @@ const insecureHttpUrlRule: Rule = {
         }
       },
       
-      // Check for baseURL in axios.create
       ObjectProperty(path: any) {
         const { node } = path;
         
@@ -113,10 +100,6 @@ const insecureHttpUrlRule: Rule = {
   },
 };
 
-/**
- * Rule: INSECURE_WEBVIEW
- * Detects WebView with insecure configuration
- */
 const insecureWebViewRule: Rule = {
   id: 'INSECURE_WEBVIEW',
   description: 'WebView with insecure configuration detected',
@@ -133,7 +116,6 @@ const insecureWebViewRule: Rule = {
       JSXElement(path: any) {
         const { node } = path;
         
-        // Check if it's a WebView component
         if (
           node.openingElement.name.type === 'JSXIdentifier' &&
           node.openingElement.name.name === 'WebView'
@@ -141,7 +123,6 @@ const insecureWebViewRule: Rule = {
           let hasJavaScriptEnabled = false;
           let hasWildcardOrigin = false;
           
-          // Check attributes
           node.openingElement.attributes.forEach((attr: any) => {
             if (attr.type === 'JSXAttribute' && attr.name.type === 'JSXIdentifier') {
               if (attr.name.name === 'javaScriptEnabled') {
@@ -171,7 +152,6 @@ const insecureWebViewRule: Rule = {
             }
           });
           
-          // If both conditions are met, flag it
           if (hasJavaScriptEnabled && hasWildcardOrigin) {
             const line = getLineNumber(context.fileContent, node.start || 0);
             
@@ -197,4 +177,3 @@ export const networkRules: RuleGroup = {
   category: RuleCategory.NETWORK,
   rules: [insecureHttpUrlRule, insecureWebViewRule],
 };
-

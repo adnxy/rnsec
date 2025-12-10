@@ -1,8 +1,3 @@
-/**
- * React Native specific security scanner
- * Detects React Native framework-specific vulnerabilities
- */
-
 import _traverse from '@babel/traverse';
 const traverse = (_traverse as any).default || _traverse;
 import type { Rule, RuleContext, RuleGroup } from '../types/ruleTypes.js';
@@ -10,10 +5,6 @@ import { Severity, type Finding } from '../types/findings.js';
 import { getLineNumber, extractSnippet } from '../utils/stringUtils.js';
 import { RuleCategory } from '../types/ruleTypes.js';
 
-/**
- * Rule: JAVASCRIPT_ENABLED_BRIDGE
- * Detects exposed JavaScript bridge that could allow code injection
- */
 const javascriptEnabledBridgeRule: Rule = {
   id: 'JAVASCRIPT_ENABLED_BRIDGE',
   description: 'Native module exposed to JavaScript without proper input validation',
@@ -30,7 +21,6 @@ const javascriptEnabledBridgeRule: Rule = {
       CallExpression(path: any) {
         const { node } = path;
         
-        // Check for NativeModules usage without validation
         if (
           node.callee.type === 'MemberExpression' &&
           node.callee.object.type === 'MemberExpression' &&
@@ -39,14 +29,12 @@ const javascriptEnabledBridgeRule: Rule = {
         ) {
           const moduleName = node.callee.object.property?.name;
           
-          // Check if parameters are passed directly without validation
           if (node.arguments.length > 0) {
             const surroundingCode = context.fileContent.substring(
               Math.max(0, (node.start || 0) - 200),
               Math.min(context.fileContent.length, (node.end || 0) + 100)
             );
             
-            // Look for validation keywords
             const hasValidation = /validate|sanitize|check|verify/i.test(surroundingCode);
             
             if (!hasValidation) {
@@ -71,10 +59,6 @@ const javascriptEnabledBridgeRule: Rule = {
   },
 };
 
-/**
- * Rule: DEBUGGER_ENABLED_PRODUCTION
- * Detects debug mode or debugger statements that shouldn't be in production
- */
 const debuggerEnabledProductionRule: Rule = {
   id: 'DEBUGGER_ENABLED_PRODUCTION',
   description: 'Debugger statement or debug mode enabled in production code',
@@ -103,7 +87,6 @@ const debuggerEnabledProductionRule: Rule = {
         });
       },
       
-      // Check for console.log without __DEV__ check
       CallExpression(path: any) {
         const { node } = path;
         
@@ -112,19 +95,12 @@ const debuggerEnabledProductionRule: Rule = {
           node.callee.object.type === 'Identifier' &&
           node.callee.object.name === 'console'
         ) {
-          // Check if it's wrapped in __DEV__ check
-          let parent = path.parent;
-          let hasDevCheck = false;
-          
-          // Simple check for __DEV__ in surrounding code
           const surroundingCode = context.fileContent.substring(
             Math.max(0, (node.start || 0) - 100),
             Math.min(context.fileContent.length, (node.end || 0) + 50)
           );
           
-          if (surroundingCode.includes('__DEV__')) {
-            hasDevCheck = true;
-          }
+          const hasDevCheck = surroundingCode.includes('__DEV__');
           
           if (!hasDevCheck && ['log', 'debug', 'info'].includes(node.callee.property.name)) {
             const line = getLineNumber(context.fileContent, node.start || 0);
@@ -147,10 +123,6 @@ const debuggerEnabledProductionRule: Rule = {
   },
 };
 
-/**
- * Rule: INSECURE_DEEPLINK_HANDLER
- * Detects deep links handled without proper validation
- */
 const insecureDeeplinkHandlerRule: Rule = {
   id: 'INSECURE_DEEPLINK_HANDLER',
   description: 'Deep link or URL scheme handled without validation',
@@ -167,7 +139,6 @@ const insecureDeeplinkHandlerRule: Rule = {
       CallExpression(path: any) {
         const { node } = path;
         
-        // Check for Linking.addEventListener or useEffect with Linking
         if (
           node.callee.type === 'MemberExpression' &&
           node.callee.object.type === 'Identifier' &&
@@ -175,7 +146,6 @@ const insecureDeeplinkHandlerRule: Rule = {
           node.callee.property.type === 'Identifier' &&
           (node.callee.property.name === 'addEventListener' || node.callee.property.name === 'getInitialURL')
         ) {
-          // Check if there's validation in the callback
           const callbackArg = node.arguments[1] || node.arguments[0];
           
           if (callbackArg) {
@@ -208,13 +178,9 @@ const insecureDeeplinkHandlerRule: Rule = {
   },
 };
 
-/**
- * Rule: FLATLIST_SENSITIVE_DATA
- * Detects FlatList rendering sensitive data without proper security measures
- */
 const flatlistSensitiveDataRule: Rule = {
   id: 'FLATLIST_SENSITIVE_DATA',
-  description: 'FlatList rendering potentially sensitive data without removeClippedSubviews',
+  description: 'FlatList rendering sensitive financial or PII data without removeClippedSubviews',
   severity: Severity.LOW,
   fileTypes: ['.js', '.jsx', '.ts', '.tsx'],
   apply: async (context: RuleContext): Promise<Finding[]> => {
@@ -252,21 +218,42 @@ const flatlistSensitiveDataRule: Rule = {
             }
           });
           
-          // Check if data source contains sensitive keywords
-          const sensitiveKeywords = ['user', 'account', 'transaction', 'payment', 'credit', 'password'];
-          const hasSensitiveData = sensitiveKeywords.some(keyword => dataSource.includes(keyword));
+          const financialDataKeywords = [
+            'transactions',
+            'paymenthistory', 'payment_history',
+            'creditcards', 'credit_cards',
+            'banktransfers', 'bank_transfers',
+            'cardnumbers', 'card_numbers'
+          ];
           
-          if (hasSensitiveData && !hasRemoveClippedSubviews) {
+          const hasFinancialData = financialDataKeywords.some(keyword => dataSource.includes(keyword));
+          
+          if (!hasFinancialData) {
+            return;
+          }
+          
+          const renderItemCode = context.fileContent.substring(
+            node.start || 0,
+            node.end || 0
+          ).toLowerCase();
+          
+          const rendersSensitiveFields = 
+            (renderItemCode.includes('cardnumber') || renderItemCode.includes('card.number')) ||
+            (renderItemCode.includes('accountnumber') || renderItemCode.includes('account.number')) ||
+            renderItemCode.includes('ssn') ||
+            renderItemCode.includes('amount') && renderItemCode.includes('balance');
+          
+          if (hasFinancialData && rendersSensitiveFields && !hasRemoveClippedSubviews) {
             const line = getLineNumber(context.fileContent, node.start || 0);
             
             findings.push({
               ruleId: 'FLATLIST_SENSITIVE_DATA',
-              description: 'FlatList with sensitive data should use removeClippedSubviews for security',
+              description: 'FlatList rendering financial transaction or card data without removeClippedSubviews',
               severity: Severity.LOW,
               filePath: context.filePath,
               line,
               snippet: extractSnippet(context.fileContent, line),
-              suggestion: 'Add removeClippedSubviews={true} to prevent sensitive data from being held in memory for off-screen items',
+              suggestion: 'Add removeClippedSubviews={true} to prevent sensitive financial data from being held in memory for off-screen items',
             });
           }
         }
@@ -277,10 +264,6 @@ const flatlistSensitiveDataRule: Rule = {
   },
 };
 
-/**
- * Rule: EXPO_SECURE_STORE_FALLBACK
- * Detects SecureStore usage without fallback for unsupported devices
- */
 const expoSecureStoreFallbackRule: Rule = {
   id: 'EXPO_SECURE_STORE_FALLBACK',
   description: 'Expo SecureStore used without checking availability or fallback',
@@ -293,7 +276,6 @@ const expoSecureStoreFallbackRule: Rule = {
       return findings;
     }
 
-    // Check if SecureStore is imported
     const hasSecureStore = context.fileContent.includes('SecureStore');
     
     if (!hasSecureStore) {
@@ -304,14 +286,12 @@ const expoSecureStoreFallbackRule: Rule = {
       CallExpression(path: any) {
         const { node } = path;
         
-        // Check for SecureStore.setItemAsync or getItemAsync
         if (
           node.callee.type === 'MemberExpression' &&
           node.callee.object.type === 'Identifier' &&
           node.callee.object.name === 'SecureStore' &&
           (node.callee.property.name === 'setItemAsync' || node.callee.property.name === 'getItemAsync')
         ) {
-          // Check if there's a try-catch or availability check nearby
           const surroundingCode = context.fileContent.substring(
             Math.max(0, (node.start || 0) - 300),
             Math.min(context.fileContent.length, (node.end || 0) + 100)
@@ -341,10 +321,6 @@ const expoSecureStoreFallbackRule: Rule = {
   },
 };
 
-/**
- * Rule: ANIMATED_TIMING_SENSITIVE
- * Detects animations that might expose sensitive data during transitions
- */
 const animatedTimingSensitiveRule: Rule = {
   id: 'ANIMATED_TIMING_SENSITIVE',
   description: 'Sensitive data visible during animations or transitions',
@@ -357,7 +333,31 @@ const animatedTimingSensitiveRule: Rule = {
       return findings;
     }
 
-    // Check for Animated.timing with sensitive data
+    let hasSecureTextEntry = false;
+    
+    traverse(context.ast, {
+      JSXElement(path: any) {
+        const { node } = path;
+        const elementName = node.openingElement?.name?.name;
+        
+        if (elementName === 'TextInput') {
+          node.openingElement.attributes.forEach((attr: any) => {
+            if (
+              attr.type === 'JSXAttribute' && 
+              attr.name?.name === 'secureTextEntry' &&
+              attr.value?.expression?.value === true
+            ) {
+              hasSecureTextEntry = true;
+            }
+          });
+        }
+      },
+    });
+
+    if (!hasSecureTextEntry) {
+      return findings;
+    }
+
     traverse(context.ast, {
       CallExpression(path: any) {
         const { node } = path;
@@ -368,25 +368,43 @@ const animatedTimingSensitiveRule: Rule = {
           node.callee.object.name === 'Animated' &&
           (node.callee.property.name === 'timing' || node.callee.property.name === 'spring')
         ) {
-          const surroundingCode = context.fileContent.substring(
-            Math.max(0, (node.start || 0) - 200),
-            Math.min(context.fileContent.length, (node.end || 0) + 200)
-          ).toLowerCase();
+          const firstArg = node.arguments[0];
+          if (!firstArg || firstArg.type !== 'Identifier') {
+            return;
+          }
           
-          const sensitiveKeywords = ['password', 'pin', 'ssn', 'cvv', 'credit', 'card'];
-          const hasSensitiveData = sensitiveKeywords.some(keyword => surroundingCode.includes(keyword));
+          const animatedVarName = firstArg.name.toLowerCase();
           
-          if (hasSensitiveData) {
+          const isVisibilityAnimation = 
+            animatedVarName.includes('opacity') ||
+            animatedVarName.includes('visible') ||
+            animatedVarName.includes('show') ||
+            animatedVarName.includes('fade');
+          
+          if (!isVisibilityAnimation) {
+            return;
+          }
+          
+          const closeContext = context.fileContent.substring(
+            Math.max(0, (node.start || 0) - 80),
+            Math.min(context.fileContent.length, (node.end || 0) + 80)
+          );
+          
+          const isPasswordToggle = 
+            (closeContext.includes('showPassword') || closeContext.includes('setShowPassword')) ||
+            (closeContext.includes('passwordVisible') || closeContext.includes('setPasswordVisible'));
+          
+          if (isPasswordToggle) {
             const line = getLineNumber(context.fileContent, node.start || 0);
             
             findings.push({
               ruleId: 'ANIMATED_TIMING_SENSITIVE',
-              description: 'Sensitive data may be visible during animation transitions',
+              description: 'Password visibility toggle with animation may expose sensitive data during transition',
               severity: Severity.LOW,
               filePath: context.filePath,
               line,
               snippet: extractSnippet(context.fileContent, line),
-              suggestion: 'Use immediate transitions (duration: 0) for screens with sensitive data to prevent exposure',
+              suggestion: 'Use immediate transitions (duration: 0) for password visibility toggles to prevent exposure',
             });
           }
         }
@@ -397,13 +415,9 @@ const animatedTimingSensitiveRule: Rule = {
   },
 };
 
-/**
- * Rule: TOUCHABLEOPACITY_SENSITIVE_ACTION
- * Detects sensitive actions without confirmation
- */
 const touchableOpacitySensitiveActionRule: Rule = {
   id: 'TOUCHABLEOPACITY_SENSITIVE_ACTION',
-  description: 'Sensitive action (delete, payment) without confirmation dialog',
+  description: 'Destructive or financial action without confirmation dialog',
   severity: Severity.MEDIUM,
   fileTypes: ['.js', '.jsx', '.ts', '.tsx'],
   apply: async (context: RuleContext): Promise<Finding[]> => {
@@ -441,24 +455,449 @@ const touchableOpacitySensitiveActionRule: Rule = {
               Math.min(context.fileContent.length, end + 300)
             ).toLowerCase();
             
-            const sensitiveActions = ['delete', 'remove', 'payment', 'transfer', 'send', 'buy', 'purchase'];
-            const hasSensitiveAction = sensitiveActions.some(action => handlerCode.includes(action));
-            const hasConfirmation = /alert|confirm|modal|dialog/i.test(handlerCode);
+            const destructiveActions = [
+              'deleteaccount', 'delete_account', 'removeaccount', 'remove_account',
+              'deleteuser', 'delete_user', 'closeaccount', 'close_account',
+              'deletesubscription', 'delete_subscription', 'cancelsubscription', 'cancel_subscription',
+              'deletepaymentmethod', 'delete_payment', 'removepaymentmethod', 'remove_payment',
+            ];
             
-            if (hasSensitiveAction && !hasConfirmation) {
+            const financialActions = [
+              'makepayment', 'make_payment', 'processpayment', 'process_payment',
+              'chargepayment', 'charge_payment', 'createcharge', 'create_charge',
+              'purchaseticket', 'purchase_ticket', 'buyticket', 'buy_ticket',
+              'transferfunds', 'transfer_funds', 'sendmoney', 'send_money',
+              'refundpayment', 'refund_payment', 'processrefund', 'process_refund',
+            ];
+            
+            const handlerCodeNoSpaces = handlerCode.replace(/\s+/g, '');
+            
+            const hasDestructiveAction = destructiveActions.some(action => handlerCodeNoSpaces.includes(action));
+            const hasFinancialAction = financialActions.some(action => handlerCodeNoSpaces.includes(action));
+            
+            const hasConfirmation = /alert\.alert|confirm|showmodal|setmodal.*true|dialog|confirmationmodal/i.test(handlerCode);
+            
+            const contextStart = Math.max(0, start - 500);
+            const contextEnd = Math.min(context.fileContent.length, end + 500);
+            const contextCode = context.fileContent.substring(contextStart, contextEnd).toLowerCase();
+            
+            const isInDeleteContext = /delete.*account|delete.*subscription|delete.*payment|remove.*account/i.test(contextCode);
+            const isInPaymentContext = /payment.*process|make.*payment|purchase|buy.*ticket|charge.*customer/i.test(contextCode);
+            
+            const isTrulySensitive = (hasDestructiveAction && isInDeleteContext) || (hasFinancialAction && isInPaymentContext);
+            
+            if (isTrulySensitive && !hasConfirmation) {
               const line = getLineNumber(context.fileContent, node.start || 0);
+              
+              let actionType = 'destructive';
+              if (hasFinancialAction) {
+                actionType = 'payment';
+              } else if (handlerCodeNoSpaces.includes('deleteaccount') || handlerCodeNoSpaces.includes('closeaccount')) {
+                actionType = 'account deletion';
+              } else if (handlerCodeNoSpaces.includes('delete') || handlerCodeNoSpaces.includes('remove')) {
+                actionType = 'deletion';
+              }
               
               findings.push({
                 ruleId: 'TOUCHABLEOPACITY_SENSITIVE_ACTION',
-                description: 'Sensitive action triggered without user confirmation',
+                description: `Critical ${actionType} action triggered without user confirmation`,
                 severity: Severity.MEDIUM,
                 filePath: context.filePath,
                 line,
                 snippet: extractSnippet(context.fileContent, line),
-                suggestion: 'Add confirmation dialog (Alert.alert) before executing sensitive actions like delete or payment',
+                suggestion: 'Add confirmation dialog (Alert.alert) before executing destructive or financial actions',
               });
             }
           }
+        }
+      },
+    });
+
+    return findings;
+  },
+};
+
+const screenshotProtectionMissingRule: Rule = {
+  id: 'SCREENSHOT_PROTECTION_MISSING',
+  description: 'Sensitive screen without screenshot/screen recording protection',
+  severity: Severity.LOW,
+  fileTypes: ['.js', '.jsx', '.ts', '.tsx'],
+  apply: async (context: RuleContext): Promise<Finding[]> => {
+    const findings: Finding[] = [];
+    
+    if (!context.ast) {
+      return findings;
+    }
+
+    const filePath = context.filePath.toLowerCase();
+    
+    if (
+      filePath.includes('node_modules') ||
+      filePath.includes('metro.config') ||
+      filePath.includes('babel.config') ||
+      filePath.includes('jest.config') ||
+      filePath.includes('webpack.config') ||
+      filePath.includes('.config.') ||
+      filePath.includes('/scripts/') ||
+      filePath.includes('/config/') ||
+      filePath.includes('/utils/') ||
+      filePath.includes('/helpers/') ||
+      filePath.includes('/constants/') ||
+      filePath.includes('/lib/') ||
+      filePath.includes('/hooks/') ||
+      filePath.includes('/store/') ||
+      filePath.includes('/redux/') ||
+      filePath.includes('/slices/') ||
+      filePath.includes('/api/') ||
+      filePath.includes('/services/') ||
+      filePath.includes('/types/') ||
+      filePath.includes('/models/') ||
+      filePath.includes('index.') ||
+      filePath.endsWith('.test.tsx') ||
+      filePath.endsWith('.test.ts') ||
+      filePath.endsWith('.spec.tsx') ||
+      filePath.endsWith('.spec.ts')
+    ) {
+      return findings;
+    }
+
+    const isLikelyScreen = 
+      filePath.includes('/screens/') ||
+      filePath.includes('/pages/') ||
+      filePath.includes('/views/') ||
+      filePath.match(/screen\.(tsx|jsx)$/) ||
+      filePath.match(/page\.(tsx|jsx)$/);
+
+    if (!isLikelyScreen) {
+      return findings;
+    }
+
+    let hasJSXReturn = false;
+    let isReactComponent = false;
+    
+    traverse(context.ast, {
+      ImportDeclaration(path: any) {
+        const { node } = path;
+        if (node.source && node.source.value === 'react') {
+          isReactComponent = true;
+        }
+      },
+      
+      ReturnStatement(path: any) {
+        const { node } = path;
+        if (node.argument && (node.argument.type === 'JSXElement' || node.argument.type === 'JSXFragment')) {
+          hasJSXReturn = true;
+        }
+      },
+    });
+
+    if (!isReactComponent || !hasJSXReturn) {
+      return findings;
+    }
+
+    let hasSensitiveInput = false;
+    let sensitiveType = '';
+    
+    traverse(context.ast, {
+      JSXElement(path: any) {
+        const { node } = path;
+        const elementName = node.openingElement?.name?.name;
+        
+        if (elementName === 'TextInput') {
+          node.openingElement.attributes.forEach((attr: any) => {
+            if (attr.type === 'JSXAttribute' && attr.name?.name) {
+              const attrName = attr.name.name.toLowerCase();
+              const attrValue = attr.value?.value?.toLowerCase() || '';
+              
+              if (
+                attrName === 'securetextentry' ||
+                (attrName === 'placeholder' && (
+                  attrValue.includes('password') ||
+                  attrValue.includes('pin code') ||
+                  attrValue.includes('cvv') ||
+                  attrValue.includes('credit card') ||
+                  attrValue.includes('card number') ||
+                  attrValue.includes('ssn') ||
+                  attrValue.includes('social security')
+                )) ||
+                (attrName === 'autocomplete' && (
+                  attrValue === 'password' ||
+                  attrValue === 'password-new' ||
+                  attrValue.startsWith('cc-') ||
+                  attrValue === 'credit-card-number'
+                ))
+              ) {
+                hasSensitiveInput = true;
+                sensitiveType = attrValue || 'secure input';
+              }
+            }
+          });
+        }
+        
+        const paymentComponents = ['CreditCardForm', 'CardForm', 'PaymentForm', 'CardInput', 'StripeCardField', 'CardField'];
+        if (paymentComponents.includes(elementName)) {
+          hasSensitiveInput = true;
+          sensitiveType = 'payment form';
+        }
+      },
+      
+      VariableDeclarator(path: any) {
+        const { node } = path;
+        if (node.id.type === 'Identifier') {
+          const varName = node.id.name.toLowerCase();
+          
+          if (
+            (varName === 'password' || varName === 'pin' || varName === 'cvv' || varName === 'cardnumber') &&
+            node.init &&
+            node.init.type === 'CallExpression' &&
+            node.init.callee.name === 'useState'
+          ) {
+            hasSensitiveInput = true;
+            sensitiveType = varName + ' field';
+          }
+        }
+      },
+    });
+
+    if (!hasSensitiveInput) {
+      return findings;
+    }
+
+    let hasScreenshotProtection = false;
+    
+    traverse(context.ast, {
+      ImportDeclaration(path: any) {
+        const { node } = path;
+        if (node.source && node.source.value) {
+          const importSource = node.source.value.toLowerCase();
+          if (
+            importSource.includes('screen-capture') || 
+            importSource.includes('screenshot-prevent') ||
+            importSource.includes('expo-screen-capture')
+          ) {
+            hasScreenshotProtection = true;
+          }
+        }
+      },
+      
+      CallExpression(path: any) {
+        const { node } = path;
+        
+        if (
+          node.callee.type === 'MemberExpression' &&
+          node.callee.object.name === 'ScreenCapture' &&
+          node.callee.property.name === 'preventScreenCaptureAsync'
+        ) {
+          hasScreenshotProtection = true;
+        }
+      },
+    });
+
+    if (!hasScreenshotProtection) {
+      findings.push({
+        ruleId: 'SCREENSHOT_PROTECTION_MISSING',
+        description: `Sensitive screen with ${sensitiveType} without screenshot protection`,
+        severity: Severity.MEDIUM,
+        filePath: context.filePath,
+        line: 1,
+        suggestion: 'Use expo-screen-capture or react-native-screenshot-prevent to block screenshots on sensitive screens',
+      });
+    }
+
+    return findings;
+  },
+};
+
+const rootDetectionMissingRule: Rule = {
+  id: 'ROOT_DETECTION_MISSING',
+  description: 'No root/jailbreak detection for sensitive application',
+  severity: Severity.LOW,
+  fileTypes: ['.js', '.jsx', '.ts', '.tsx'],
+  apply: async (context: RuleContext): Promise<Finding[]> => {
+    const findings: Finding[] = [];
+    
+    if (!context.ast) {
+      return findings;
+    }
+
+    if (!context.filePath.match(/App\.(tsx|ts|jsx|js)$/) && !context.filePath.includes('index.')) {
+      return findings;
+    }
+
+    const fileContent = context.fileContent.toLowerCase();
+    const isSensitiveApp = 
+      fileContent.includes('payment') || 
+      fileContent.includes('banking') ||
+      fileContent.includes('finance') ||
+      fileContent.includes('auth');
+    
+    if (!isSensitiveApp) {
+      return findings;
+    }
+
+    let hasRootDetection = false;
+    
+    traverse(context.ast, {
+      ImportDeclaration(path: any) {
+        const { node } = path;
+        if (node.source && node.source.value) {
+          const importSource = node.source.value.toLowerCase();
+          if (
+            importSource.includes('jailbreak') || 
+            importSource.includes('rootdetection') ||
+            importSource.includes('jail-monkey')
+          ) {
+            hasRootDetection = true;
+          }
+        }
+      },
+    });
+
+    if (!hasRootDetection) {
+      findings.push({
+        ruleId: 'ROOT_DETECTION_MISSING',
+        description: 'Sensitive app without root/jailbreak detection',
+        severity: Severity.LOW,
+        filePath: context.filePath,
+        line: 1,
+        suggestion: 'Implement root/jailbreak detection using jail-monkey or similar library to protect sensitive data',
+      });
+    }
+
+    return findings;
+  },
+};
+
+const unsafeDangerouslySetInnerHtmlRule: Rule = {
+  id: 'UNSAFE_DANGEROUSLY_SET_INNER_HTML',
+  description: 'dangerouslySetInnerHTML used with potentially unsafe content',
+  severity: Severity.HIGH,
+  fileTypes: ['.js', '.jsx', '.ts', '.tsx'],
+  apply: async (context: RuleContext): Promise<Finding[]> => {
+    const findings: Finding[] = [];
+    
+    if (!context.ast) {
+      return findings;
+    }
+
+    traverse(context.ast, {
+      JSXAttribute(path: any) {
+        const { node } = path;
+        
+        if (
+          node.name.type === 'JSXIdentifier' &&
+          node.name.name === 'dangerouslySetInnerHTML'
+        ) {
+          if (node.value && node.value.type === 'JSXExpressionContainer') {
+            const start = Math.max(0, (node.start || 0) - 200);
+            const end = Math.min(context.fileContent.length, (node.end || 0) + 200);
+            const surroundingCode = context.fileContent.substring(start, end).toLowerCase();
+            
+            const hasSanitization = /sanitize|dompurify|xss|escape/i.test(surroundingCode);
+            
+            if (!hasSanitization) {
+              const line = getLineNumber(context.fileContent, node.start || 0);
+              
+              findings.push({
+                ruleId: 'UNSAFE_DANGEROUSLY_SET_INNER_HTML',
+                description: 'dangerouslySetInnerHTML without HTML sanitization - XSS risk',
+                severity: Severity.HIGH,
+                filePath: context.filePath,
+                line,
+                snippet: extractSnippet(context.fileContent, line),
+                suggestion: 'Sanitize HTML content with DOMPurify or similar library before rendering to prevent XSS attacks',
+              });
+            }
+          }
+        }
+      },
+    });
+
+    return findings;
+  },
+};
+
+const networkLoggerInProductionRule: Rule = {
+  id: 'NETWORK_LOGGER_IN_PRODUCTION',
+  description: 'Network request/response logging enabled - may expose sensitive data',
+  severity: Severity.MEDIUM,
+  fileTypes: ['.js', '.jsx', '.ts', '.tsx'],
+  apply: async (context: RuleContext): Promise<Finding[]> => {
+    const findings: Finding[] = [];
+    
+    if (!context.ast) {
+      return findings;
+    }
+
+    traverse(context.ast, {
+      CallExpression(path: any) {
+        const { node } = path;
+        
+        if (
+          node.callee.type === 'MemberExpression' &&
+          node.callee.property.type === 'Identifier' &&
+          node.callee.property.name === 'use'
+        ) {
+          const start = (node.start || 0);
+          const end = Math.min(context.fileContent.length, (node.end || 0) + 500);
+          const code = context.fileContent.substring(start, end).toLowerCase();
+          
+          const hasInterceptor = /interceptor|request|response/i.test(code);
+          const hasLogging = /console\.log|logger|debug|\.data|\.headers/i.test(code);
+          const hasDevCheck = /__DEV__|process\.env\.NODE_ENV.*development/i.test(code);
+          
+          if (hasInterceptor && hasLogging && !hasDevCheck) {
+            const line = getLineNumber(context.fileContent, node.start || 0);
+            
+            findings.push({
+              ruleId: 'NETWORK_LOGGER_IN_PRODUCTION',
+              description: 'Network interceptor with logging not wrapped in __DEV__ check',
+              severity: Severity.MEDIUM,
+              filePath: context.filePath,
+              line,
+              snippet: extractSnippet(context.fileContent, line),
+              suggestion: 'Wrap network logging in __DEV__ check or disable in production to prevent sensitive data exposure',
+            });
+          }
+        }
+      },
+    });
+
+    return findings;
+  },
+};
+
+const evalUsageRule: Rule = {
+  id: 'EVAL_USAGE',
+  description: 'eval() used - code injection risk',
+  severity: Severity.HIGH,
+  fileTypes: ['.js', '.jsx', '.ts', '.tsx'],
+  apply: async (context: RuleContext): Promise<Finding[]> => {
+    const findings: Finding[] = [];
+    
+    if (!context.ast) {
+      return findings;
+    }
+
+    traverse(context.ast, {
+      CallExpression(path: any) {
+        const { node } = path;
+        
+        if (
+          node.callee.type === 'Identifier' &&
+          (node.callee.name === 'eval' || node.callee.name === 'Function')
+        ) {
+          const line = getLineNumber(context.fileContent, node.start || 0);
+          
+          findings.push({
+            ruleId: 'EVAL_USAGE',
+            description: `Dangerous ${node.callee.name}() usage detected - code injection risk`,
+            severity: Severity.HIGH,
+            filePath: context.filePath,
+            line,
+            snippet: extractSnippet(context.fileContent, line),
+            suggestion: 'Avoid eval() and Function() constructor. Use JSON.parse() for JSON data or refactor code',
+          });
         }
       },
     });
@@ -477,6 +916,10 @@ export const reactNativeRules: RuleGroup = {
     expoSecureStoreFallbackRule,
     animatedTimingSensitiveRule,
     touchableOpacitySensitiveActionRule,
+    screenshotProtectionMissingRule,
+    rootDetectionMissingRule,
+    unsafeDangerouslySetInnerHtmlRule,
+    networkLoggerInProductionRule,
+    evalUsageRule,
   ],
 };
-

@@ -1,20 +1,10 @@
-/**
- * Logging security scanner
- * Detects sensitive data in logs
- */
-
 import _traverse from '@babel/traverse';
-// Handle ESM/CommonJS interop
 const traverse = (_traverse as any).default || _traverse;
 import type { Rule, RuleContext, RuleGroup } from '../types/ruleTypes.js';
 import { Severity, type Finding } from '../types/findings.js';
 import { containsSensitiveKeyword, getLineNumber, extractSnippet } from '../utils/stringUtils.js';
 import { RuleCategory } from '../types/ruleTypes.js';
 
-/**
- * Rule: SENSITIVE_LOGGING
- * Detects console.log of sensitive data
- */
 const sensitiveLoggingRule: Rule = {
   id: 'SENSITIVE_LOGGING',
   description: 'Sensitive data potentially logged to console',
@@ -31,7 +21,6 @@ const sensitiveLoggingRule: Rule = {
       CallExpression(path: any) {
         const { node } = path;
         
-        // Check for console.log, console.error, console.warn
         if (
           node.callee.type === 'MemberExpression' &&
           node.callee.object.type === 'Identifier' &&
@@ -39,12 +28,10 @@ const sensitiveLoggingRule: Rule = {
           node.callee.property.type === 'Identifier' &&
           ['log', 'error', 'warn', 'info', 'debug'].includes(node.callee.property.name)
         ) {
-          // Check arguments for sensitive keywords
           for (const arg of node.arguments) {
             let hasSensitiveData = false;
             let sensitiveContext = '';
             
-            // Check string literals
             if (arg.type === 'StringLiteral') {
               if (containsSensitiveKeyword(arg.value)) {
                 hasSensitiveData = true;
@@ -52,7 +39,6 @@ const sensitiveLoggingRule: Rule = {
               }
             }
             
-            // Check identifiers (variable names)
             if (arg.type === 'Identifier') {
               if (containsSensitiveKeyword(arg.name)) {
                 hasSensitiveData = true;
@@ -60,7 +46,6 @@ const sensitiveLoggingRule: Rule = {
               }
             }
             
-            // Check member expressions like user.password
             if (arg.type === 'MemberExpression') {
               const memberStr = context.fileContent.substring(arg.start || 0, arg.end || 0);
               if (containsSensitiveKeyword(memberStr)) {
@@ -69,7 +54,6 @@ const sensitiveLoggingRule: Rule = {
               }
             }
             
-            // Check template literals
             if (arg.type === 'TemplateLiteral') {
               const templateStr = context.fileContent.substring(arg.start || 0, arg.end || 0);
               if (containsSensitiveKeyword(templateStr)) {
@@ -91,7 +75,7 @@ const sensitiveLoggingRule: Rule = {
                 suggestion: 'Remove console logs containing sensitive data before production or use a logging library with filtering',
               });
               
-              break; // Only report once per console call
+              break;
             }
           }
         }
@@ -106,4 +90,3 @@ export const loggingRules: RuleGroup = {
   category: RuleCategory.LOGGING,
   rules: [sensitiveLoggingRule],
 };
-
