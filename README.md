@@ -1,16 +1,41 @@
 # rnsec
 
-Lightweight security scanner for React Native and Expo applications. Performs static analysis to detect security vulnerabilities in your mobile codebase.
+<p align="center">
+  <strong>🔒 Professional Security Scanner for React Native & Expo</strong>
+</p>
+
+<p align="center">
+  Static analysis tool detecting 62+ security vulnerabilities in mobile applications
+</p>
+
+<p align="center">
+  <a href="#installation">Installation</a> •
+  <a href="#quick-start">Quick Start</a> •
+  <a href="#security-checks">Security Checks</a> •
+  <a href="#cicd-integration">CI/CD</a> •
+  <a href="#contributing">Contributing</a>
+</p>
+
+---
+
+## Why rnsec?
+
+**Comprehensive Coverage**: 62 security rules across 13 categories including storage, network, authentication, cryptography, and platform-specific vulnerabilities.
+
+**API Key Detection**: Automatically identifies 27+ types of exposed secrets (Firebase, AWS, Stripe, GitHub, Slack, etc.)
+
+**Platform-Specific**: Dedicated scanners for Android (AndroidManifest.xml) and iOS (Info.plist) with 14+ mobile-specific checks.
+
+**Production Ready**: Zero configuration, fast scanning, and multiple output formats for development and CI/CD workflows.
 
 ## Installation
-
-### NPM
 
 ```bash
 npm install -g rnsec
 ```
 
-### From Source
+<details>
+<summary>Install from source</summary>
 
 ```bash
 git clone https://github.com/yourusername/rnsec.git
@@ -19,28 +44,69 @@ npm install
 npm run build
 npm link
 ```
+</details>
+
+## Quick Start
+
+```bash
+# Scan your project
+rnsec scan
+
+# Generate interactive HTML report
+rnsec scan --html report.html
+
+# View all available rules
+rnsec rules
+```
 
 ## Usage
 
-### Basic Scan
+### Command Line Options
 
 ```bash
-rnsec scan /path/to/your/project
+rnsec scan [options]
+
+Options:
+  -p, --path <path>        Path to project root (default: ".")
+  --json                   Output results as JSON
+  --html <filename>        Generate HTML report
+  --output <filename>      Save JSON results to file
+  --silent                 Suppress console output
 ```
 
-### Output Formats
+### Examples
 
 ```bash
-# JSON output
-rnsec scan /path/to/your/project --json
+# Scan current directory with HTML report
+rnsec scan --html security-report.html
 
-# HTML report
-rnsec scan /path/to/your/project --html
+# Scan specific project with JSON output
+rnsec scan --path ./my-app --json
+
+# Generate report for CI/CD
+rnsec scan --output results.json --silent
 ```
 
 ## Security Checks
 
-**Total: 62 security rules** across 13 categories
+rnsec includes **62 security rules** organized into 13 categories:
+
+| Category | Rules | Key Checks |
+|----------|-------|------------|
+| 🔐 **Storage** | 5 | AsyncStorage sensitive data, hardcoded secrets, PII encryption |
+| 🌐 **Network** | 10 | HTTP usage, WebView security, SSL/TLS configuration |
+| 🔑 **Authentication** | 7 | JWT validation, biometric fallback, session management |
+| 🔐 **Cryptography** | 2 | Weak algorithms (MD5/SHA1), hardcoded keys |
+| 📝 **Logging** | 1 | Sensitive data in logs |
+| 📱 **React Native** | 12 | Bridge security, deep links, eval() usage, XSS |
+| 🔓 **Secrets** | 2 | API keys (27+ patterns), exposed credentials |
+| 🐛 **Debug** | 6 | Test credentials, debug endpoints, dev tools |
+| 🤖 **Android** | 7 | Manifest misconfigurations, exported components |
+| 🍎 **iOS** | 7 | Info.plist issues, ATS exceptions, permissions |
+| ⚙️ **Configuration** | 1 | Dangerous permissions |
+
+<details>
+<summary><strong>View All 62 Rules</strong></summary>
 
 ### 🔐 Storage Security (5 rules)
 
@@ -159,128 +225,108 @@ rnsec scan /path/to/your/project --html
 |---------|----------|-------------|
 | `EXPO_INSECURE_PERMISSIONS` | LOW | Flags potentially dangerous permissions in app.json |
 
-### 🔍 Pattern Detection
+</details>
 
-The scanner detects **27+ types of API keys and secrets**:
-- Firebase API Keys
-- AWS Access Keys & Secrets
-- Google Cloud & OAuth Keys
-- Stripe Keys (Live, Restricted, Publishable)
-- GitHub Tokens (Personal Access, OAuth)
-- Slack Tokens & Webhooks
-- Twilio API Keys
-- SendGrid API Keys
-- Mailgun & Mailchimp Keys
-- Private Keys (RSA, SSH, PGP)
-- Heroku & DigitalOcean Tokens
-- JWT Tokens
-- Bearer Tokens
-- Basic Auth Credentials
-- And more...
+### 🔍 API Key Detection
+
+The `API_KEY_EXPOSED` rule detects 27+ types of exposed secrets:
+
+**Cloud Providers**: Firebase, AWS (Access Keys, Secrets), Google Cloud, Heroku, DigitalOcean  
+**Payment**: Stripe (Live, Restricted, Publishable), PayPal  
+**Communication**: Twilio, SendGrid, Mailgun, Mailchimp, Slack  
+**Development**: GitHub (PAT, OAuth), GitLab  
+**Cryptographic**: Private Keys (RSA, SSH, PGP), Certificates  
+**Authentication**: JWT, Bearer Tokens, Basic Auth, OAuth Client Secrets
+
+## CI/CD Integration
+
+### GitHub Actions
+
+```yaml
+name: Security Scan
+on: [push, pull_request]
+
+jobs:
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-node@v3
+      - run: npm install -g rnsec
+      - run: rnsec scan --output security-results.json
+      - uses: actions/upload-artifact@v3
+        with:
+          name: security-report
+          path: security-results.json
+```
+
+### Exit Codes
+
+- `0`: No high-severity issues found
+- `1`: High-severity vulnerabilities detected (fails CI/CD)
 
 ## Examples
 
-The `examples/` directory contains sample projects demonstrating security issues:
-
-### Running the Vulnerable App Example
+Test the scanner with sample projects in the `examples/` directory:
 
 ```bash
-# Scan the vulnerable app
-rnsec scan examples/vulnerable-app
+# Scan vulnerable app (35+ issues)
+rnsec scan examples/vulnerable-app --html vulnerable-report.html
 
-# Generate HTML report
-rnsec scan examples/vulnerable-app --html
+# Scan secure app (minimal issues)
+rnsec scan examples/secure-app --html secure-report.html
 ```
-
-### Running the Secure App Example
-
-```bash
-# Scan the secure app (should show minimal or no issues)
-rnsec scan examples/secure-app
-```
-
-The vulnerable app demonstrates common security mistakes, while the secure app shows best practices for secure React Native development.
 
 ## Contributing
 
-We welcome contributions! Here's how to get started:
+Contributions are welcome! Please follow these steps:
 
-### Setup Development Environment
+1. Fork the repository
+2. Create a feature branch: `git checkout -b feature/new-rule`
+3. Make your changes and test with examples
+4. Commit: `git commit -m 'Add new security rule'`
+5. Push: `git push origin feature/new-rule`
+6. Open a Pull Request
+
+### Development Setup
 
 ```bash
-# Clone the repository
 git clone https://github.com/yourusername/rnsec.git
 cd rnsec
-
-# Install dependencies
 npm install
-
-# Build the project
 npm run build
-
-# Run in development mode
-npm run dev
 ```
+
+### Adding New Security Rules
+
+1. Create or modify a scanner in `src/scanners/`
+2. Follow the `Rule` interface pattern
+3. Test with `examples/vulnerable-app`
+4. Update README with rule details
 
 ### Project Structure
 
 ```
 src/
 ├── cli/              # Command-line interface
-├── core/             # Core scanning engine
-│   ├── astParser.ts      # JavaScript/TypeScript AST parsing
-│   ├── fileWalker.ts     # File system traversal
-│   ├── ruleEngine.ts     # Rule execution engine
-│   └── reporter.ts       # Report generation
-├── scanners/         # Security rule implementations
-│   ├── authenticationScanner.ts  # Auth & session security
-│   ├── configScanner.ts          # Expo config checks
-│   ├── cryptoScanner.ts          # Cryptography issues
-│   ├── loggingScanner.ts         # Sensitive data logging
-│   ├── manifestScanner.ts        # Basic manifest checks
-│   ├── networkScanner.ts         # Network & HTTP security
-│   ├── reactNativeScanner.ts     # RN-specific vulnerabilities
-│   ├── storageScanner.ts         # Storage & secrets
-│   ├── webviewScanner.ts         # WebView security
-│   ├── secretsScanner.ts         # API key detection (27+ patterns)
-│   ├── debugScanner.ts           # Debug artifacts
-│   ├── androidScanner.ts         # Android-specific security
-│   └── iosScanner.ts             # iOS-specific security
-├── types/            # TypeScript type definitions
-└── utils/            # Utility functions
+├── core/             # Scanning engine (AST parser, file walker, rule engine)
+├── scanners/         # 13 security scanners with 62 rules
+├── types/            # TypeScript definitions
+└── utils/            # Helper functions
 ```
-
-### Adding New Rules
-
-1. Create or modify a scanner in `src/scanners/`
-2. Define your rule following the `Rule` interface
-3. Add tests using the examples in `examples/vulnerable-app`
-4. Update this README with your new rule
-
-### Code Style
-
-- Use TypeScript with strict mode
-- Follow functional programming patterns
-- Write clear, descriptive variable names
-- Add comments for complex logic
-
-### Submitting Pull Requests
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-rule`)
-3. Commit your changes (`git commit -m 'Add amazing security rule'`)
-4. Push to the branch (`git push origin feature/amazing-rule`)
-5. Open a Pull Request
 
 ## License
 
-MIT
+MIT License - see [LICENSE](LICENSE) for details
 
 ## Support
 
-- Issues: [GitHub Issues](https://github.com/yourusername/rnsec/issues)
-- Discussions: [GitHub Discussions](https://github.com/yourusername/rnsec/discussions)
+- 🐛 **Issues**: [GitHub Issues](https://github.com/yourusername/rnsec/issues)
+- 💬 **Discussions**: [GitHub Discussions](https://github.com/yourusername/rnsec/discussions)
+- 📖 **Documentation**: [Wiki](https://github.com/yourusername/rnsec/wiki)
 
 ---
 
-Built with ❤️ for the React Native community
+<p align="center">
+  Built with ❤️ for the React Native community
+</p>
