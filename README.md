@@ -279,19 +279,8 @@ The `API_KEY_EXPOSED` rule detects 27+ types of exposed secrets:
 Test the scanner with included sample projects:
 
 ```bash
-# Scan vulnerable app (35+ security issues)
-rnsec scan --path examples/vulnerable-app
-
-# Scan secure app (minimal issues)
 rnsec scan --path examples/secure-app
-
-# Scan and open HTML report
 rnsec scan --path examples/vulnerable-app
-open rnsec-report.html  # macOS
-# or
-start rnsec-report.html  # Windows
-# or
-xdg-open rnsec-report.html  # Linux
 ```
 
 ## CI/CD Integration
