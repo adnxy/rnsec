@@ -61,7 +61,7 @@ const javascriptEnabledBridgeRule: Rule = {
 
 const debuggerEnabledProductionRule: Rule = {
   id: 'DEBUGGER_ENABLED_PRODUCTION',
-  description: 'Debugger statement or debug mode enabled in production code',
+  description: 'Debugger statement found in production code',
   severity: Severity.MEDIUM,
   fileTypes: ['.js', '.jsx', '.ts', '.tsx'],
   apply: async (context: RuleContext): Promise<Finding[]> => {
@@ -85,37 +85,6 @@ const debuggerEnabledProductionRule: Rule = {
           snippet: extractSnippet(context.fileContent, line),
           suggestion: 'Remove debugger statements before production deployment or use conditional: if (__DEV__) debugger;',
         });
-      },
-      
-      CallExpression(path: any) {
-        const { node } = path;
-        
-        if (
-          node.callee.type === 'MemberExpression' &&
-          node.callee.object.type === 'Identifier' &&
-          node.callee.object.name === 'console'
-        ) {
-          const surroundingCode = context.fileContent.substring(
-            Math.max(0, (node.start || 0) - 100),
-            Math.min(context.fileContent.length, (node.end || 0) + 50)
-          );
-          
-          const hasDevCheck = surroundingCode.includes('__DEV__');
-          
-          if (!hasDevCheck && ['log', 'debug', 'info'].includes(node.callee.property.name)) {
-            const line = getLineNumber(context.fileContent, node.start || 0);
-            
-            findings.push({
-              ruleId: 'DEBUGGER_ENABLED_PRODUCTION',
-              description: `console.${node.callee.property.name}() without __DEV__ check`,
-              severity: Severity.LOW,
-              filePath: context.filePath,
-              line,
-              snippet: extractSnippet(context.fileContent, line),
-              suggestion: 'Wrap console logs in if (__DEV__) to prevent them in production builds',
-            });
-          }
-        }
       },
     });
 

@@ -293,29 +293,28 @@ export class Reporter {
       console.log(chalk.gray('  ─────────────────────────────────────────────────────────────'));
     } else {
       console.log('');
-      console.log(chalk.bold.white('  ╔═══════════════════════════════════════════════════════════╗'));
-      console.log(chalk.bold.white('  ║                  DETAILED REPORTS                         ║'));
-      console.log(chalk.bold.white('  ╚═══════════════════════════════════════════════════════════╝'));
+      console.log(chalk.bold.cyan('  📊 DETAILED REPORTS'));
+      console.log(chalk.gray('  ─'.repeat(60)));
     }
     
     console.log('');
     
     if (html) {
-      console.log(chalk.green.bold('  🌐 HTML Report (Click to open):'));
+      console.log(chalk.green('  🌐 HTML Report:'));
       console.log(chalk.cyan.underline(`     file://${html}`));
-      console.log(chalk.gray(`     Interactive report with filters and full details`));
+      console.log(chalk.gray('     → Interactive web dashboard with filtering and details'));
       console.log('');
     }
     
     if (json) {
-      console.log(chalk.green.bold('  📄 JSON Report:'));
-      console.log(chalk.white(`     ${json}`));
-      console.log(chalk.gray(`     Machine-readable format for CI/CD integration`));
+      console.log(chalk.green('  📄 JSON Report:'));
+      console.log(chalk.cyan(`     ${json}`));
+      console.log(chalk.gray('     → Machine-readable format for CI/CD pipelines'));
       console.log('');
     }
     
     if (!isTop) {
-      console.log(chalk.gray('  💡 Tip: Cmd/Ctrl + Click the links above to open them'));
+      console.log(chalk.gray('  💡 Tip: Cmd/Ctrl + Click the file:// link to open in browser'));
     }
     
     console.log('');

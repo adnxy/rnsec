@@ -137,8 +137,8 @@ rnsec includes **62 security rules** organized into 13 categories:
 | 📱 **React Native** | 12 | Bridge security, deep links, eval() usage, XSS |
 | 🔓 **Secrets** | 2 | API keys (27+ patterns), exposed credentials |
 | 🐛 **Debug** | 6 | Test credentials, debug endpoints, dev tools |
-| 🤖 **Android** | 7 | Manifest misconfigurations, exported components |
-| 🍎 **iOS** | 7 | Info.plist issues, ATS exceptions, permissions |
+| 📱 **Android** | 7 | Manifest misconfigurations, exported components |
+| 📱 **iOS** | 7 | Info.plist issues, ATS exceptions, permissions |
 | ⚙️ **Configuration** | 1 | Dangerous permissions |
 
 <details>

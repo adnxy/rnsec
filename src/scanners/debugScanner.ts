@@ -1,9 +1,9 @@
 import _traverse from '@babel/traverse';
 const traverse = (_traverse as any).default || _traverse;
-import type { Rule, RuleContext, RuleGroup } from '../types/ruleTypes.js';
 import { Severity, type Finding } from '../types/findings.js';
 import { getLineNumber, extractSnippet } from '../utils/stringUtils.js';
 import { RuleCategory } from '../types/ruleTypes.js';
+import type { Rule, RuleContext, RuleGroup } from '../types/ruleTypes.js';
 
 const testCredentialsRule: Rule = {
   id: 'TEST_CREDENTIALS_IN_CODE',
@@ -18,7 +18,7 @@ const testCredentialsRule: Rule = {
     }
 
     const filePath = context.filePath.toLowerCase();
-    if (filePath.includes('.test.') || 
+    if (filePath.includes('.test.') ||
         filePath.includes('.spec.') ||
         filePath.includes('/__tests__/') ||
         filePath.includes('/test/')) {
@@ -39,7 +39,6 @@ const testCredentialsRule: Rule = {
         if (match.index === undefined) continue;
         
         const line = getLineNumber(context.fileContent, match.index);
-        
         findings.push({
           ruleId: 'TEST_CREDENTIALS_IN_CODE',
           description: `Test ${type} found in production code: ${match[0]}`,
@@ -84,7 +83,7 @@ const debugEndpointsRule: Rule = {
       StringLiteral(path: any) {
         const { node } = path;
         const value = node.value;
-
+        
         if (typeof value === 'string' && (value.includes('://') || value.startsWith('/'))) {
           for (const pattern of debugEndpoints) {
             if (pattern.test(value)) {
@@ -94,7 +93,7 @@ const debugEndpointsRule: Rule = {
                 Math.max(0, (node.start || 0) - 150),
                 Math.min(context.fileContent.length, (node.end || 0) + 150)
               );
-
+              
               const hasDevCheck = /__DEV__|process\.env\.NODE_ENV/.test(surroundingCode);
               
               if (!hasDevCheck) {
@@ -135,21 +134,19 @@ const reduxDevToolsRule: Rule = {
       MemberExpression(path: any) {
         const { node } = path;
         
-        if (
-          node.object.type === 'Identifier' &&
-          node.object.name === 'window' &&
-          node.property.type === 'Identifier' &&
-          node.property.name === '__REDUX_DEVTOOLS_EXTENSION__'
-        ) {
+        if (node.object.type === 'Identifier' &&
+            node.object.name === 'window' &&
+            node.property.type === 'Identifier' &&
+            node.property.name === '__REDUX_DEVTOOLS_EXTENSION__') {
+          
           const start = Math.max(0, (node.start || 0) - 200);
           const end = Math.min(context.fileContent.length, (node.end || 0) + 200);
           const surroundingCode = context.fileContent.substring(start, end);
-
+          
           const hasDevCheck = /__DEV__|process\.env\.NODE_ENV.*!==.*production/.test(surroundingCode);
           
           if (!hasDevCheck) {
             const line = getLineNumber(context.fileContent, node.start || 0);
-            
             findings.push({
               ruleId: 'REDUX_DEVTOOLS_ENABLED',
               description: 'Redux DevTools extension enabled without production check',
@@ -194,7 +191,6 @@ const storybookInProductionRule: Rule = {
           
           if (importPath.includes('@storybook') || importPath.includes('storybook')) {
             const line = getLineNumber(context.fileContent, node.start || 0);
-            
             findings.push({
               ruleId: 'STORYBOOK_IN_PRODUCTION',
               description: `Storybook import in production code: ${importPath}`,
@@ -230,7 +226,6 @@ const sourceMapInProductionRule: Rule = {
         if (match.index === undefined) continue;
         
         const line = getLineNumber(context.fileContent, match.index);
-        
         findings.push({
           ruleId: 'SOURCEMAP_REFERENCE',
           description: 'Source map reference found - exposes source code structure',
@@ -263,19 +258,18 @@ const alertInProductionRule: Rule = {
       CallExpression(path: any) {
         const { node } = path;
         
-        if (node.callee.type === 'Identifier' && 
+        if (node.callee.type === 'Identifier' &&
             (node.callee.name === 'alert' || node.callee.name === 'prompt' || node.callee.name === 'confirm')) {
           
           const surroundingCode = context.fileContent.substring(
             Math.max(0, (node.start || 0) - 100),
             Math.min(context.fileContent.length, (node.end || 0) + 50)
           );
-
+          
           const hasDevCheck = /__DEV__|NODE_ENV/.test(surroundingCode);
           
           if (!hasDevCheck) {
             const line = getLineNumber(context.fileContent, node.start || 0);
-            
             findings.push({
               ruleId: 'ALERT_IN_PRODUCTION',
               description: `${node.callee.name}() call without __DEV__ check - likely debug code`,
@@ -305,4 +299,3 @@ export const debugRules: RuleGroup = {
     alertInProductionRule,
   ],
 };
-

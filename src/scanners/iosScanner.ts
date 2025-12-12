@@ -1,6 +1,6 @@
-import type { Rule, RuleContext, RuleGroup } from '../types/ruleTypes.js';
 import { Severity, type Finding } from '../types/findings.js';
 import { RuleCategory } from '../types/ruleTypes.js';
+import type { Rule, RuleContext, RuleGroup } from '../types/ruleTypes.js';
 
 const iosUsageDescriptionsMissingRule: Rule = {
   id: 'IOS_USAGE_DESCRIPTIONS_MISSING',
@@ -45,7 +45,7 @@ const iosUsageDescriptionsMissingRule: Rule = {
 
     for (const { key, feature, severity } of requiredDescriptions) {
       const hasKey = context.plistContent.includes(`<key>${key}</key>`);
-      
+
       if (!hasKey) {
         const frameworkNeeded = frameworkPatterns.find(fp => 
           fp.descriptions.includes(key) && context.plistContent && fp.pattern.test(context.plistContent)
@@ -67,7 +67,7 @@ const iosUsageDescriptionsMissingRule: Rule = {
         if (match && match[1] && typeof match[1] === 'string') {
           const description = match[1].trim();
           
-          if (description.length < 10 || 
+          if (description.length < 10 ||
               description.toLowerCase().includes('placeholder') ||
               description.toLowerCase().includes('todo')) {
             findings.push({
@@ -100,9 +100,10 @@ const iosBackgroundModesUnnecessaryRule: Rule = {
 
     const backgroundModesPattern = /<key>UIBackgroundModes<\/key>\s*<array>([\s\S]*?)<\/array>/i;
     const match = context.plistContent.match(backgroundModesPattern);
-    
+
     if (match) {
       const modesContent = match[1];
+      
       const sensitiveBackgroundModes = [
         { mode: 'location', concern: 'Continuous location tracking drains battery and raises privacy concerns' },
         { mode: 'fetch', concern: 'Background fetch may expose data during background updates' },
@@ -141,14 +142,14 @@ const iosUniversalLinksMisconfiguredRule: Rule = {
     }
 
     const hasUniversalLinks = context.plistContent.includes('com.apple.developer.associated-domains');
-    
+
     if (hasUniversalLinks) {
       const domainPattern = /<string>applinks:(.*?)<\/string>/gi;
       const matches = context.plistContent.matchAll(domainPattern);
-      
+
       for (const match of matches) {
         const domain = match[1];
-        
+
         if (domain.includes('*') || domain.includes('?')) {
           findings.push({
             ruleId: 'IOS_UNIVERSAL_LINKS_MISCONFIGURED',
@@ -158,7 +159,7 @@ const iosUniversalLinksMisconfiguredRule: Rule = {
             suggestion: 'Specify exact domains for universal links. Avoid wildcards that could allow unintended domains.',
           });
         }
-        
+
         if (!domain.includes('.')) {
           findings.push({
             ruleId: 'IOS_UNIVERSAL_LINKS_MISCONFIGURED',
@@ -189,15 +190,13 @@ const iosCustomUrlSchemeUnprotectedRule: Rule = {
 
     const urlTypesPattern = /<key>CFBundleURLTypes<\/key>\s*<array>([\s\S]*?)<\/array>/i;
     const match = context.plistContent.match(urlTypesPattern);
-    
+
     if (match) {
       const urlTypesContent = match[1];
       const schemePattern = /<key>CFBundleURLSchemes<\/key>\s*<array>([\s\S]*?)<\/array>/gi;
       const schemeMatches = urlTypesContent.matchAll(schemePattern);
-      
+
       for (const schemeMatch of schemeMatches) {
-        const schemes = schemeMatch[1];
-        
         findings.push({
           ruleId: 'IOS_CUSTOM_URL_SCHEME_UNPROTECTED',
           description: 'Custom URL scheme detected - ensure deep link validation is implemented',
@@ -226,10 +225,10 @@ const iosKeychainAccessGroupInsecureRule: Rule = {
 
     const keychainPattern = /<key>keychain-access-groups<\/key>\s*<array>([\s\S]*?)<\/array>/i;
     const match = context.plistContent.match(keychainPattern);
-    
+
     if (match) {
       const groupsContent = match[1];
-      
+
       if (groupsContent.includes('*')) {
         findings.push({
           ruleId: 'IOS_KEYCHAIN_ACCESS_GROUP_INSECURE',
@@ -258,7 +257,7 @@ const iosDataProtectionMissingRule: Rule = {
     }
 
     const hasDataProtection = context.plistContent.includes('NSFileProtectionComplete') ||
-                             context.plistContent.includes('com.apple.developer.default-data-protection');
+                              context.plistContent.includes('com.apple.developer.default-data-protection');
 
     const sensitiveIndicators = [
       'NSCameraUsageDescription',
@@ -299,22 +298,20 @@ const iosAtsExceptionTooPermissiveRule: Rule = {
 
     const exceptionDomainsPattern = /<key>NSExceptionDomains<\/key>\s*<dict>([\s\S]*?)<\/dict>/i;
     const match = context.plistContent.match(exceptionDomainsPattern);
-    
+
     if (match && match[1]) {
       const domainsContent = match[1];
-      
       const domainPattern = /<key>(.*?)<\/key>/gi;
       const domainMatches = domainsContent.matchAll(domainPattern);
-      
+
       for (const domainMatch of domainMatches) {
         const domain = domainMatch[1];
-        
         const domainConfigPattern = new RegExp(`<key>${domain}</key>\\s*<dict>([\\s\\S]*?)<\\/dict>`, 'i');
         const domainConfig = domainsContent.match(domainConfigPattern);
-        
+
         if (domainConfig) {
           const config = domainConfig[1];
-          
+
           if (config.includes('NSIncludesSubdomains') && config.includes('<true/>')) {
             findings.push({
               ruleId: 'IOS_ATS_EXCEPTION_TOO_PERMISSIVE',
@@ -324,7 +321,7 @@ const iosAtsExceptionTooPermissiveRule: Rule = {
               suggestion: `Limit ATS exceptions to specific subdomains instead of using NSIncludesSubdomains for ${domain}.`,
             });
           }
-          
+
           if (config.includes('NSAllowsArbitraryLoadsInWebContent')) {
             findings.push({
               ruleId: 'IOS_ATS_EXCEPTION_TOO_PERMISSIVE',
@@ -354,4 +351,3 @@ export const iosRules: RuleGroup = {
     iosAtsExceptionTooPermissiveRule,
   ],
 };
-

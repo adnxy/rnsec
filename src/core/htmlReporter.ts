@@ -1,18 +1,18 @@
-import { writeFile } from 'fs/promises';
-import { resolve } from 'path';
-import type { Finding, Severity, ScanResult } from '../types/findings.js';
+import { writeFile } from "fs/promises";
+import { resolve } from "path";
+import type { Finding, Severity, ScanResult } from "../types/findings.js";
 
 export class HtmlReporter {
   async generateReport(result: ScanResult, outputPath: string): Promise<void> {
     const html = this.buildHtml(result);
-    await writeFile(resolve(outputPath), html, 'utf-8');
+    await writeFile(resolve(outputPath), html, "utf-8");
   }
 
   private buildHtml(result: ScanResult): string {
     const { findings } = result;
-    const high = findings.filter(f => f.severity === 'HIGH');
-    const medium = findings.filter(f => f.severity === 'MEDIUM');
-    const low = findings.filter(f => f.severity === 'LOW');
+    const high = findings.filter((f) => f.severity === "HIGH");
+    const medium = findings.filter((f) => f.severity === "MEDIUM");
+    const low = findings.filter((f) => f.severity === "LOW");
 
     return `<!DOCTYPE html>
 <html lang="en">
@@ -421,13 +421,16 @@ export class HtmlReporter {
       </div>
     </div>
     
-    ${findings.length > 0 ? `
+    ${
+      findings.length > 0
+        ? `
     <div class="findings">
-      ${this.renderFindings(high, 'HIGH')}
-      ${this.renderFindings(medium, 'MEDIUM')}
-      ${this.renderFindings(low, 'LOW')}
+      ${this.renderFindings(high, "HIGH")}
+      ${this.renderFindings(medium, "MEDIUM")}
+      ${this.renderFindings(low, "LOW")}
     </div>
-    ` : `
+    `
+        : `
     <div class="no-findings">
       <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"></path>
@@ -435,13 +438,16 @@ export class HtmlReporter {
       <h2>No Security Issues Found!</h2>
       <p>Your React Native app passed all security checks.</p>
     </div>
-    `}
+    `
+    }
 
     <div class="footer">
       <div class="logo">rnsec</div>
       <p>React Native & Expo Security Scanner</p>
       <p style="margin-top: 8px; opacity: 0.6;">
-        Scanned ${result.scannedFiles || 'N/A'} files in ${(result.duration / 1000).toFixed(2)}s · ${result.timestamp.toLocaleString()}
+        Scanned ${result.scannedFiles || "N/A"} files in ${(
+      result.duration / 1000
+    ).toFixed(2)}s · ${result.timestamp.toLocaleString()}
       </p>
     </div>
   </div>
@@ -501,12 +507,16 @@ export class HtmlReporter {
   }
 
   private renderFindings(findings: Finding[], severityLabel: string): string {
-    return findings.map((finding, index) => `
+    return findings
+      .map(
+        (finding, index) => `
       <div class="finding ${severityLabel.toLowerCase()}" data-severity="${severityLabel.toLowerCase()}">
         <div class="finding-header">
           <div class="finding-left">
             <span class="severity-badge ${severityLabel.toLowerCase()}">${severityLabel}</span>
-            <div class="finding-title">${this.escapeHtml(finding.description || finding.ruleId)}</div>
+            <div class="finding-title">${this.escapeHtml(
+              finding.description || finding.ruleId
+            )}</div>
           </div>
           <svg class="expand-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path>
@@ -515,45 +525,65 @@ export class HtmlReporter {
         
         <div class="finding-content">
           <div class="finding-content-inner">
-            ${finding.description && finding.description !== finding.ruleId ? `
-              <div class="finding-description">${this.escapeHtml(finding.description)}</div>
-            ` : ''}
+            ${
+              finding.description && finding.description !== finding.ruleId
+                ? `
+              <div class="finding-description">${this.escapeHtml(
+                finding.description
+              )}</div>
+            `
+                : ""
+            }
             
             <div class="finding-location">
               <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
               </svg>
-              <span>${this.escapeHtml(finding.filePath)}${finding.line ? ':' + finding.line : ''}</span>
+              <span>${this.escapeHtml(finding.filePath)}${
+          finding.line ? ":" + finding.line : ""
+        }</span>
             </div>
             
-            ${finding.snippet ? `
+            ${
+              finding.snippet
+                ? `
             <div class="code-snippet">
               <pre>${this.escapeHtml(finding.snippet)}</pre>
             </div>
-            ` : ''}
+            `
+                : ""
+            }
             
-            ${finding.suggestion ? `
+            ${
+              finding.suggestion
+                ? `
             <div class="suggestion">
               <div class="suggestion-title">
                 💡 Recommendation
               </div>
-              <div class="suggestion-text">${this.escapeHtml(finding.suggestion)}</div>
+              <div class="suggestion-text">${this.escapeHtml(
+                finding.suggestion
+              )}</div>
             </div>
-            ` : ''}
+            `
+                : ""
+            }
           </div>
         </div>
       </div>
-    `).join('');
+    `
+      )
+      .join("");
   }
 
   private escapeHtml(text: string): string {
     const map: Record<string, string> = {
-      '&': '&amp;',
-      '<': '&lt;',
-      '>': '&gt;',
-      '"': '&quot;',
-      "'": '&#039;',
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#039;",
     };
-    return text.replace(/[&<>"']/g, m => map[m]);
+    return text.replace(/[&<>"']/g, (m) => map[m]);
   }
 }

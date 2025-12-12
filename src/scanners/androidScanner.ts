@@ -1,6 +1,6 @@
-import type { Rule, RuleContext, RuleGroup } from '../types/ruleTypes.js';
 import { Severity, type Finding } from '../types/findings.js';
 import { RuleCategory } from '../types/ruleTypes.js';
+import type { Rule, RuleContext, RuleGroup } from '../types/ruleTypes.js';
 
 const androidDebuggableRule: Rule = {
   id: 'ANDROID_DEBUGGABLE_ENABLED',
@@ -42,7 +42,7 @@ const androidBackupAllowedRule: Rule = {
 
     const hasBackupEnabled = context.xmlContent.includes('android:allowBackup="true"');
     const hasBackupFalse = context.xmlContent.includes('android:allowBackup="false"');
-    
+
     const sensitiveIndicators = [
       'permission.CAMERA',
       'permission.ACCESS_FINE_LOCATION',
@@ -91,20 +91,18 @@ const androidExportedComponentRule: Rule = {
     }
 
     const componentTypes = ['activity', 'service', 'receiver', 'provider'];
-    
+
     for (const componentType of componentTypes) {
       const componentPattern = new RegExp(
         `<${componentType}[^>]*android:exported="true"[^>]*>([\\s\\S]*?)</${componentType}>`,
         'gi'
       );
-      
       const matches = context.xmlContent.matchAll(componentPattern);
-      
+
       for (const match of matches) {
         const componentContent = match[0];
         const hasPermission = componentContent.includes('android:permission=');
-        const hasIntentFilter = componentContent.includes('<intent-filter');
-        
+
         if (!hasPermission) {
           findings.push({
             ruleId: 'ANDROID_EXPORTED_COMPONENT',
@@ -143,7 +141,7 @@ const androidIntentFilterTooPermissiveRule: Rule = {
       if (context.xmlContent.includes(action)) {
         const intentFilterPattern = /<intent-filter[\s\S]*?<\/intent-filter>/gi;
         const matches = context.xmlContent.matchAll(intentFilterPattern);
-        
+
         for (const match of matches) {
           const filterContent = match[0];
           
@@ -207,13 +205,13 @@ const androidUnprotectedBroadcastReceiverRule: Rule = {
 
     const receiverPattern = /<receiver[^>]*>[\s\S]*?<\/receiver>/gi;
     const matches = context.xmlContent.matchAll(receiverPattern);
-    
+
     for (const match of matches) {
       const receiverContent = match[0];
       const hasPermission = receiverContent.includes('android:permission=');
-      const isExported = receiverContent.includes('android:exported="true"') || 
+      const isExported = receiverContent.includes('android:exported="true"') ||
                         receiverContent.includes('<intent-filter');
-      
+
       if (isExported && !hasPermission) {
         findings.push({
           ruleId: 'ANDROID_UNPROTECTED_RECEIVER',
@@ -243,14 +241,14 @@ const androidContentProviderNoPermissionRule: Rule = {
 
     const providerPattern = /<provider[^>]*\/?>|<provider[^>]*>[\s\S]*?<\/provider>/gi;
     const matches = context.xmlContent.matchAll(providerPattern);
-    
+
     for (const match of matches) {
       const providerContent = match[0];
       const isExported = providerContent.includes('android:exported="true"');
       const hasReadPermission = providerContent.includes('android:readPermission=');
       const hasWritePermission = providerContent.includes('android:writePermission=');
       const hasPermission = providerContent.includes('android:permission=');
-      
+
       if (isExported && !hasReadPermission && !hasWritePermission && !hasPermission) {
         findings.push({
           ruleId: 'ANDROID_CONTENT_PROVIDER_NO_PERMISSION',
@@ -278,4 +276,3 @@ export const androidRules: RuleGroup = {
     androidContentProviderNoPermissionRule,
   ],
 };
-
