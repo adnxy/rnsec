@@ -2,6 +2,7 @@ import chalk from 'chalk';
 import boxen from 'boxen';
 import gradient from 'gradient-string';
 import type { Finding, Severity, ScanResult } from '../types/findings.js';
+import { SEVERITY_THRESHOLDS, TERMINAL } from '../constants.js';
 
 export interface ReporterOptions {
   json?: boolean;
@@ -12,9 +13,20 @@ export interface ReporterOptions {
   };
 }
 
+const SEVERITY_ICONS = {
+  HIGH: '🔴',
+  MEDIUM: '🟡',
+  LOW: '🔵',
+} as const;
+
+const SEVERITY_COLORS = {
+  HIGH: chalk.red,
+  MEDIUM: chalk.yellow,
+  LOW: chalk.blue,
+} as const;
+
 const securityGradient = gradient(['#ff0000', '#ff6b6b']);
 const successGradient = gradient(['#00ff00', '#00cc00']);
-const warningGradient = gradient(['#ffaa00', '#ff8800']);
 
 export class Reporter {
   private options: ReporterOptions;
@@ -23,6 +35,9 @@ export class Reporter {
     this.options = options;
   }
 
+  /**
+   * Generate and display the security scan report
+   */
   report(result: ScanResult): void {
     if (this.options.json) {
       this.reportJson(result);
@@ -33,7 +48,7 @@ export class Reporter {
       return;
     }
 
-    if (result.findings.length > 40) {
+    if (result.findings.length > SEVERITY_THRESHOLDS.FINDINGS_COMPACT_MODE) {
       this.reportCompact(result);
     } else {
       this.reportPretty(result);
@@ -127,18 +142,13 @@ export class Reporter {
     findings: Finding[],
     color: typeof chalk.red
   ): void {
-    const icons = {
-      HIGH: '🔴',
-      MEDIUM: '🟡',
-      LOW: '🔵',
-    };
-    const icon = icons[severity as keyof typeof icons] || '●';
+    const icon = SEVERITY_ICONS[severity as keyof typeof SEVERITY_ICONS] || '●';
     
     // Section header
     console.log('');
     const headerLine = `  ${icon} ${severity} SEVERITY - ${findings.length} ${findings.length === 1 ? 'ISSUE' : 'ISSUES'}`;
     console.log(color.bold(headerLine));
-    console.log(chalk.gray('  ' + '─'.repeat(60)));
+    console.log(chalk.gray('  ' + '─'.repeat(TERMINAL.SEPARATOR_LENGTH)));
     console.log('');
 
     // Get background colors for each severity
@@ -150,9 +160,9 @@ export class Reporter {
     
     const theme = backgrounds[severity as keyof typeof backgrounds] || backgrounds.HIGH;
 
-    findings.forEach((finding, index) => {
-      const terminalWidth = process.stdout.columns || 100;
-      const contentWidth = Math.min(terminalWidth - 4, 120);
+    findings.forEach((finding) => {
+      const terminalWidth = process.stdout.columns || TERMINAL.DEFAULT_WIDTH;
+      const contentWidth = Math.min(terminalWidth - 4, TERMINAL.MAX_CONTENT_WIDTH);
 
       const badge = theme.badge(` ${severity} `);
       const title = finding.description || finding.ruleId;
@@ -236,9 +246,9 @@ export class Reporter {
     console.log('');
     
     // Visual dashboard
-    const highBar = high > 0 ? '█'.repeat(Math.min(high, 20)) : '─';
-    const medBar = medium > 0 ? '█'.repeat(Math.min(medium, 20)) : '─';
-    const lowBar = low > 0 ? '█'.repeat(Math.min(low, 20)) : '─';
+    const highBar = high > 0 ? '█'.repeat(Math.min(high, SEVERITY_THRESHOLDS.MAX_BAR_LENGTH)) : '─';
+    const medBar = medium > 0 ? '█'.repeat(Math.min(medium, SEVERITY_THRESHOLDS.MAX_BAR_LENGTH)) : '─';
+    const lowBar = low > 0 ? '█'.repeat(Math.min(low, SEVERITY_THRESHOLDS.MAX_BAR_LENGTH)) : '─';
     
     console.log(chalk.bold.white('  Security Issues:'));
     console.log(`    🔴 ${chalk.red.bold('High:'.padEnd(10))} ${high.toString().padStart(3)} ${high > 0 ? chalk.red(highBar) : chalk.gray(highBar)}`);
@@ -257,7 +267,9 @@ export class Reporter {
 
     // Risk assessment
     if (findings.length > 0 && high > 0) {
-      const riskLevel = high >= 10 ? 'CRITICAL' : high >= 5 ? 'HIGH' : 'ELEVATED';
+      const riskLevel = high >= SEVERITY_THRESHOLDS.RISK_CRITICAL ? 'CRITICAL' 
+        : high >= SEVERITY_THRESHOLDS.RISK_HIGH ? 'HIGH' 
+        : 'ELEVATED';
       console.log(chalk.red.bold(`  ⚠️  RISK LEVEL: ${riskLevel}`));
       console.log(chalk.red('  Immediate action required. High severity vulnerabilities detected.'));
     } else if (findings.length > 0 && medium > 0) {
@@ -335,6 +347,9 @@ export class Reporter {
     return chalk.red.bold(count.toString());
   }
 
+  /**
+   * List all available security rules
+   */
   listRules(rules: Array<{ id: string; description: string; severity: Severity }>): void {
     console.log('\n');
     const headerText = '  SECURITY RULES DATABASE  ';
@@ -357,12 +372,11 @@ export class Reporter {
     Object.entries(grouped).forEach(([severity, ruleList]) => {
       if (ruleList.length === 0) return;
       
-      const icons = { HIGH: '🔴', MEDIUM: '🟡', LOW: '🔵' };
-      const icon = icons[severity as keyof typeof icons];
-      const color = severity === 'HIGH' ? chalk.red : severity === 'MEDIUM' ? chalk.yellow : chalk.blue;
+      const icon = SEVERITY_ICONS[severity as keyof typeof SEVERITY_ICONS];
+      const color = SEVERITY_COLORS[severity as keyof typeof SEVERITY_COLORS];
       
       console.log(color.bold(`  ${icon} ${severity} SEVERITY - ${ruleList.length} rules`));
-      console.log(chalk.gray('  ' + '─'.repeat(60)));
+      console.log(chalk.gray('  ' + '─'.repeat(TERMINAL.SEPARATOR_LENGTH)));
       console.log('');
       
       ruleList.forEach((rule) => {
@@ -372,9 +386,8 @@ export class Reporter {
       });
     });
 
-    console.log(chalk.gray('  ─'.repeat(60)));
+    console.log(chalk.gray('  ─'.repeat(TERMINAL.SEPARATOR_LENGTH)));
     console.log(chalk.cyan.bold(`  📊 Total: ${rules.length} security rules loaded`));
     console.log('');
   }
 }
-

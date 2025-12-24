@@ -10,7 +10,9 @@
     "build": "tsc",
     "dev": "ts-node src/index.ts",
     "prepublishOnly": "npm run build",
-    "test": "echo \"Tests coming soon\" && exit 0"
+    "test": "echo \"Tests coming soon\" && exit 0",
+    "lint": "tsc --noEmit",
+    "clean": "rm -rf dist"
   },
   "keywords": [
     "react-native",
@@ -26,7 +28,10 @@
     "sast",
     "code-analysis",
     "security-scanner",
-    "mobile-security"
+    "mobile-security",
+    "security-testing",
+    "code-security",
+    "appsec"
   ],
   "type": "module",
   "author": "adnxy <adnanpoviolabs@gmail.com>",
@@ -44,6 +49,7 @@
   },
   "files": [
     "dist",
+    "src/core/template.html",
     "README.md",
     "LICENSE",
     "CHANGELOG.md"
@@ -54,7 +60,6 @@
     "@babel/types": "^7.26.3",
     "boxen": "^8.0.1",
     "chalk": "^5.6.2",
-    "cli-spinners": "^3.3.0",
     "commander": "^14.0.2",
     "fast-glob": "^3.3.3",
     "gradient-string": "^3.0.0",

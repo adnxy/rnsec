@@ -5,17 +5,34 @@ import { readFileContent } from '../utils/fileUtils.js';
 import { walkProjectFiles } from './fileWalker.js';
 import { isInDebugContext } from '../utils/stringUtils.js';
 
+/**
+ * Rule engine responsible for running security rules against project files
+ */
 export class RuleEngine {
   private ruleGroups: RuleGroup[] = [];
 
+  /**
+   * Register a group of security rules
+   * @param group - The rule group to register
+   */
   registerRuleGroup(group: RuleGroup): void {
     this.ruleGroups.push(group);
   }
 
+  /**
+   * Get all registered rules from all rule groups
+   * @returns Array of all rules
+   */
   getAllRules(): Rule[] {
     return this.ruleGroups.flatMap(group => group.rules);
   }
 
+  /**
+   * Run all registered rules on a project
+   * @param rootDir - Root directory of the project to scan
+   * @param progressCallback - Optional callback for progress updates
+   * @returns Scan results with findings and file count
+   */
   async runRulesOnProject(
     rootDir: string,
     progressCallback?: (progress: { current: number; total: number }) => void
@@ -46,6 +63,11 @@ export class RuleEngine {
     return { findings: allFindings, scannedFiles: totalFiles };
   }
 
+  /**
+   * Scan a single file with all applicable rules
+   * @param filePath - Path to the file to scan
+   * @returns Array of findings for this file
+   */
   private async scanFile(filePath: string): Promise<Finding[]> {
     try {
       const fileContent = await readFileContent(filePath);
@@ -59,23 +81,32 @@ export class RuleEngine {
           const ruleFindings = await rule.apply(context);
           findings.push(...ruleFindings);
         } catch (error) {
-          console.error(`Error applying rule ${rule.id} to ${filePath}:`, error);
+          // Log error but continue scanning
+          if (process.env.NODE_ENV !== 'production') {
+            console.error(`Error applying rule ${rule.id} to ${filePath}:`, error);
+          }
         }
       }
 
       // Post-process findings to detect debug context
       return this.enrichFindingsWithDebugContext(findings, fileContent);
     } catch (error) {
-      console.error(`Error scanning file ${filePath}:`, error);
+      // Log error but continue scanning other files
+      if (process.env.NODE_ENV !== 'production') {
+        console.error(`Error scanning file ${filePath}:`, error);
+      }
       return [];
     }
   }
 
-
+  /**
+   * Filter out findings that are in debug/development context
+   * @param findings - Array of findings to filter
+   * @param fileContent - Content of the file being scanned
+   * @returns Filtered findings excluding debug context
+   */
   private enrichFindingsWithDebugContext(findings: Finding[], fileContent: string): Finding[] {
-    // Filter out findings that are in debug/development context
     return findings.filter(finding => {
-      // Check if this finding is in a debug context
       const inDebugContext = isInDebugContext(
         fileContent,
         finding.snippet,
@@ -87,6 +118,12 @@ export class RuleEngine {
     });
   }
 
+  /**
+   * Prepare the context for rule execution
+   * @param filePath - Path to the file
+   * @param fileContent - Content of the file
+   * @returns Rule context with parsed AST or configuration
+   */
   private async prepareContext(
     filePath: string,
     fileContent: string
@@ -115,6 +152,11 @@ export class RuleEngine {
     return context;
   }
 
+  /**
+   * Get rules applicable to a specific file based on file type
+   * @param filePath - Path to the file
+   * @returns Array of applicable rules
+   */
   private getApplicableRules(filePath: string): Rule[] {
     const allRules = this.getAllRules();
     return allRules.filter(rule =>

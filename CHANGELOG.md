@@ -46,32 +46,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Risk level assessment (Critical/High/Medium/Low)
   - Scan performance metrics
 
-### Security Rules Highlights
-
-**HIGH severity** rules for critical vulnerabilities:
-- Hardcoded API keys and secrets (27+ patterns)
-- Insecure HTTP URLs
-- Weak cryptography (MD5, SHA1)
-- Eval() usage
-- Android debuggable in production
-- iOS ATS disabled
-- Certificate pinning disabled
-- And more...
-
-**MEDIUM severity** rules for important issues:
-- Sensitive data in AsyncStorage
-- Missing SSL/TLS configuration
-- Weak TLS versions
-- No request timeouts
-- Biometric fallback issues
-- And more...
-
-**LOW severity** rules for improvements:
-- Missing security headers
-- Excessive permissions
-- Third-party SDK risks
-- Code hygiene issues
-
 ### Technical Features
 
 - ✅ TypeScript-first architecture
@@ -90,7 +64,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 🔧 TypeScript types included
 - 🎨 Syntax-highlighted code snippets in reports
 
-## [1.0.0] - 2024-12-18
+## [1.0.0] - 2024-12-24
 
 ### 🎉 Initial Release
 
@@ -105,7 +79,7 @@ The first public release of **rnsec** - React Native Security Scanner!
 
 #### Platform Support
 - ✅ macOS
-- ✅ Linux  
+- ✅ Linux
 - ✅ Windows
 - Node.js 18+ required
 
@@ -115,6 +89,18 @@ The first public release of **rnsec** - React Native Security Scanner!
 - Android Manifests (.xml)
 - iOS Plists (.plist)
 - Configuration files (.json)
+
+#### Project Improvements
+- Added `.npmignore` for cleaner npm package
+- Added `.editorconfig` for consistent code formatting
+- Created GitHub issue templates (bug report, feature request)
+- Added pull request template
+- Added GitHub funding configuration
+- Removed unused `cli-spinners` dependency
+- Enhanced package.json with additional keywords and scripts
+- Cleaned up example files
+- **Refactored HTML reporter**: Extracted HTML template to separate file (`template.html`) for better maintainability
+- Optimized codebase structure
 
 ---
 

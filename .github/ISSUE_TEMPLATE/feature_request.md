@@ -1,51 +1,38 @@
 ---
 name: Feature Request
-about: Suggest a new feature or security rule
+about: Suggest an idea for this project
 title: '[FEATURE] '
 labels: enhancement
 assignees: ''
 ---
 
-## 💡 Feature Description
-A clear and concise description of the feature you'd like to see.
+## Feature Description
+A clear and concise description of what you want to happen.
 
-## 🎯 Problem Statement
-What problem does this feature solve? Why is it needed?
+## Problem Statement
+What problem does this feature solve? Is your feature request related to a problem?
 
-## 🔍 Proposed Solution
-Describe how you envision this feature working.
+## Proposed Solution
+Describe the solution you'd like to see implemented.
 
-## 🎨 Example Usage
-```bash
-# How would users interact with this feature?
-rnsec scan --new-feature
+## Alternative Solutions
+Describe any alternative solutions or features you've considered.
+
+## Use Cases
+Provide specific examples of how this feature would be used:
+
+1. Use case 1
+2. Use case 2
+
+## Example
+If applicable, provide a code example or mockup of how this feature would work:
+
+```typescript
+// Example usage
 ```
 
-## 🔐 Security Rule Details (if applicable)
-- **Rule ID**: `PROPOSED_RULE_NAME`
-- **Severity**: [HIGH / MEDIUM / LOW]
-- **Category**: [Storage / Network / Authentication / etc.]
-- **Detects**: What vulnerability does it catch?
+## Additional Context
+Add any other context, screenshots, or references about the feature request here.
 
-### Example Code that Should Be Flagged
-```javascript
-// Code that should trigger this rule
-```
-
-## 🤔 Alternatives Considered
-What other approaches did you consider?
-
-## 📚 References
-- Links to documentation
-- Similar features in other tools
-- Security advisories or CVEs
-
-## 💪 Implementation Help
-Are you willing to help implement this feature?
-- [ ] Yes, I can submit a PR
-- [ ] No, but I can help with testing
-- [ ] No, just suggesting
-
-## 📎 Additional Context
-Add any other context, screenshots, or examples about the feature request.
-
+## Willing to Contribute?
+- [ ] I'm willing to implement this feature and submit a PR

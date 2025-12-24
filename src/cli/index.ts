@@ -2,7 +2,7 @@
 
 import { Command } from 'commander';
 import chalk from 'chalk';
-import ora from 'ora';
+import ora, { Ora } from 'ora';
 import boxen from 'boxen';
 import gradient from 'gradient-string';
 import { RuleEngine } from '../core/ruleEngine.js';
@@ -22,15 +22,63 @@ import { debugRules } from '../scanners/debugScanner.js';
 import { androidRules } from '../scanners/androidScanner.js';
 import { iosRules } from '../scanners/iosScanner.js';
 import type { ScanResult } from '../types/findings.js';
+import { VERSION, DEFAULT_REPORT_FILENAMES, EXIT_CODES } from '../constants.js';
 
 const securityGradient = gradient(['#ff0000', '#ff6b6b', '#ff8888']);
 
 const program = new Command();
 
+interface ScanOptions {
+  path: string;
+  json?: boolean;
+  html?: string;
+  output?: string;
+  silent?: boolean;
+}
+
+/**
+ * Registers all security rule groups with the rule engine
+ */
+function registerAllRules(engine: RuleEngine): void {
+  engine.registerRuleGroup(storageRules);
+  engine.registerRuleGroup(networkRules);
+  engine.registerRuleGroup(loggingRules);
+  engine.registerRuleGroup(configRules);
+  engine.registerRuleGroup(manifestRules);
+  engine.registerRuleGroup(authenticationRules);
+  engine.registerRuleGroup(cryptoRules);
+  engine.registerRuleGroup(reactNativeRules);
+  engine.registerRuleGroup(webviewRules);
+  engine.registerRuleGroup(secretsRules);
+  engine.registerRuleGroup(debugRules);
+  engine.registerRuleGroup(androidRules);
+  engine.registerRuleGroup(iosRules);
+}
+
+/**
+ * Prints the application banner
+ */
+function printBanner(): void {
+  console.log('\n');
+  const banner = securityGradient('█████╗ ███╗   ██╗███████╗███████╗ ██████╗\n██╔══██╗████╗  ██║██╔════╝██╔════╝██╔════╝\n██████╔╝██╔██╗ ██║███████╗█████╗  ██║     \n██╔══██╗██║╚██╗██║╚════██║██╔══╝  ██║     \n██║  ██║██║ ╚████║███████║███████╗╚██████╗\n╚═╝  ╚═╝╚═╝  ╚═══╝╚══════╝╚══════╝ ╚═════╝');
+  
+  const box = boxen(banner, {
+    padding: 1,
+    margin: { top: 0, bottom: 0, left: 2, right: 2 },
+    borderStyle: 'round',
+    borderColor: 'red',
+    backgroundColor: '#000000',
+  });
+  
+  console.log(box);
+  console.log(chalk.white.bold('  React Native & Expo Security Scanner'));
+  console.log(chalk.gray('  Professional-grade static analysis tool\n'));
+}
+
 program
   .name('rnsec')
   .description('🔍 React Native & Expo Security Scanner')
-  .version('1.0.0');
+  .version(VERSION);
 
 program
   .command('scan')
@@ -40,9 +88,9 @@ program
   .option('--html <filename>', 'Generate HTML report (e.g., report.html)')
   .option('--output <filename>', 'Save JSON results to file')
   .option('--silent', 'Suppress console output')
-  .action(async (options) => {
+  .action(async (options: ScanOptions) => {
     try {
-      const targetPath = options.path as string;
+      const targetPath = options.path;
       
       if (!options.silent && !options.json) {
         printBanner();
@@ -50,7 +98,7 @@ program
 
       const engine = new RuleEngine();
       
-      let spinner: any;
+      let spinner: Ora | null = null;
       if (!options.silent && !options.json) {
         spinner = ora({
           text: chalk.cyan('Initializing security scanner...'),
@@ -58,19 +106,7 @@ program
         }).start();
       }
 
-      engine.registerRuleGroup(storageRules);
-      engine.registerRuleGroup(networkRules);
-      engine.registerRuleGroup(loggingRules);
-      engine.registerRuleGroup(configRules);
-      engine.registerRuleGroup(manifestRules);
-      engine.registerRuleGroup(authenticationRules);
-      engine.registerRuleGroup(cryptoRules);
-      engine.registerRuleGroup(reactNativeRules);
-      engine.registerRuleGroup(webviewRules);
-      engine.registerRuleGroup(secretsRules);
-      engine.registerRuleGroup(debugRules);
-      engine.registerRuleGroup(androidRules);
-      engine.registerRuleGroup(iosRules);
+      registerAllRules(engine);
 
       if (spinner) {
         spinner.succeed(chalk.green('Security rules loaded'));
@@ -105,10 +141,10 @@ program
         timestamp: new Date(),
       };
 
-      const htmlPath = options.html || (!options.json ? 'rnsec-report.html' : null);
-      const jsonPath = options.output || (!options.json ? 'rnsec-report.json' : null);
+      const htmlPath = options.html || (!options.json ? DEFAULT_REPORT_FILENAMES.HTML : null);
+      const jsonPath = options.output || (!options.json ? DEFAULT_REPORT_FILENAMES.JSON : null);
 
-      let generatedReports: { html?: string; json?: string } = {};
+      const generatedReports: { html?: string; json?: string } = {};
 
       if (htmlPath && !options.json) {
         const htmlReporter = new HtmlReporter();
@@ -136,30 +172,13 @@ program
 
       const highSeverityCount = result.findings.filter(f => f.severity === 'HIGH').length;
       if (highSeverityCount > 0) {
-        process.exit(1);
+        process.exit(EXIT_CODES.HIGH_SEVERITY_FOUND);
       }
     } catch (error) {
       console.error(chalk.red('\n❌ Error during scan:'), error);
-      process.exit(1);
+      process.exit(EXIT_CODES.ERROR);
     }
   });
-
-function printBanner(): void {
-  console.log('\n');
-  const banner = securityGradient('█████╗ ███╗   ██╗███████╗███████╗ ██████╗\n██╔══██╗████╗  ██║██╔════╝██╔════╝██╔════╝\n██████╔╝██╔██╗ ██║███████╗█████╗  ██║     \n██╔══██╗██║╚██╗██║╚════██║██╔══╝  ██║     \n██║  ██║██║ ╚████║███████║███████╗╚██████╗\n╚═╝  ╚═╝╚═╝  ╚═══╝╚══════╝╚══════╝ ╚═════╝');
-  
-  const box = boxen(banner, {
-    padding: 1,
-    margin: { top: 0, bottom: 0, left: 2, right: 2 },
-    borderStyle: 'round',
-    borderColor: 'red',
-    backgroundColor: '#000000',
-  });
-  
-  console.log(box);
-  console.log(chalk.white.bold('  React Native & Expo Security Scanner'));
-  console.log(chalk.gray('  Professional-grade static analysis tool\n'));
-}
 
 program
   .command('rules')
@@ -167,19 +186,7 @@ program
   .action(() => {
     const engine = new RuleEngine();
     
-    engine.registerRuleGroup(storageRules);
-    engine.registerRuleGroup(networkRules);
-    engine.registerRuleGroup(loggingRules);
-    engine.registerRuleGroup(configRules);
-    engine.registerRuleGroup(manifestRules);
-    engine.registerRuleGroup(authenticationRules);
-    engine.registerRuleGroup(cryptoRules);
-    engine.registerRuleGroup(reactNativeRules);
-    engine.registerRuleGroup(webviewRules);
-    engine.registerRuleGroup(secretsRules);
-    engine.registerRuleGroup(debugRules);
-    engine.registerRuleGroup(androidRules);
-    engine.registerRuleGroup(iosRules);
+    registerAllRules(engine);
 
     const rules = engine.getAllRules();
     const reporter = new Reporter();

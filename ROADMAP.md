@@ -1,211 +1,172 @@
 # Roadmap
 
-## 🎯 Vision
+This document outlines the planned features and improvements for rnsec.
 
-Make **rnsec** the go-to security scanner for React Native developers worldwide - trusted, fast, and comprehensive.
+## Version 1.x - Current Release
 
----
+### Completed
+- ✅ 63 security rules across 13 categories
+- ✅ HTML and JSON report generation
+- ✅ CLI with scan and rules commands
+- ✅ Support for React Native and Expo projects
+- ✅ Android and iOS platform-specific checks
+- ✅ 27+ API key pattern detection
+- ✅ Zero-configuration operation
 
-## ✅ v1.0.0 - Initial Release (Current)
+## Version 2.0 - Enhanced Configuration
 
-**Released: December 2024**
+### Planned Features
 
-- ✅ 63 comprehensive security rules
-- ✅ Android & iOS platform-specific checks
-- ✅ HTML & JSON reporting
-- ✅ Zero-config CLI
-- ✅ Debug context filtering
-- ✅ 27+ API key patterns
+#### Custom Rule Configuration
+- **Rule Selection**: Enable/disable specific rules via configuration file
+- **Severity Customization**: Adjust severity levels per project needs
+- **Custom Thresholds**: Configure what constitutes high/medium/low risk
+- **Ignore Patterns**: Specify files/directories to exclude from scanning
 
----
+**Configuration File Example:**
+```json
+{
+  "rnsec": {
+    "rules": {
+      "STORAGE_ASYNCSTORAGE": "error",
+      "HTTP_REQUEST": "warning",
+      "EVAL_USAGE": "off"
+    },
+    "exclude": ["**/*.test.ts", "node_modules/**"],
+    "severity": {
+      "failOn": "high"
+    }
+  }
+}
+```
 
-## 🚀 v1.1.0 - Quality & Testing (Q1 2025)
+#### Enhanced Reporting
+- PDF report generation
+- SARIF format for GitHub Security
+- Excel/CSV export for audits
+- Custom report templates
+- Trend analysis across scans
 
-**Focus: Stability & Developer Experience**
+#### Developer Experience
+- VS Code extension for real-time scanning
+- Pre-commit hooks integration
+- Watch mode for continuous scanning
+- Fix suggestions with auto-apply
+- Interactive CLI mode
 
-### Testing Infrastructure
-- [ ] Unit tests for all scanners (80% coverage target)
-- [ ] Integration tests
-- [ ] CI/CD pipeline (GitHub Actions)
-- [ ] Automated releases
+## Version 2.1 - Performance & Scale
 
-### Code Quality
-- [ ] ESLint configuration
-- [ ] Prettier for code formatting
-- [ ] Pre-commit hooks with Husky
-- [ ] Commitlint for conventional commits
+### Optimization
+- Parallel file processing
+- Incremental scanning (scan only changed files)
+- Cache results for faster re-scans
+- Memory optimization for large projects
+- Worker threads for CPU-intensive operations
 
-### Documentation
-- [ ] Video tutorials
-- [ ] Interactive examples
-- [ ] API documentation
-- [ ] Migration guides
+### Monorepo Support
+- Multi-project scanning
+- Aggregated reports across projects
+- Workspace-aware configuration
 
----
-
-## 🔍 v1.2.0 - Enhanced Detection (Q2 2025)
-
-**Focus: More Rules & Better Accuracy**
+## Version 2.2 - Advanced Detection
 
 ### New Security Rules
-- [ ] SQL injection patterns
-- [ ] GraphQL security issues
-- [ ] Firebase misconfigurations
-- [ ] AWS Amplify security checks
-- [ ] React Navigation security
-- [ ] Permissions over-requesting detection
+- SQL injection patterns
+- XSS vulnerabilities in WebViews
+- Insecure data validation
+- Business logic flaws
+- Race condition detection
+- Memory leak patterns
 
-### False Positive Reduction
-- [ ] ML-based context detection
-- [ ] Configurable rule severity
-- [ ] Custom rule exclusions
-- [ ] Whitelist file patterns
+### Enhanced Analysis
+- Data flow analysis
+- Control flow analysis
+- Taint tracking for sensitive data
+- Cross-file analysis
+- Dependency vulnerability scanning
 
-### Performance
-- [ ] Parallel file processing
-- [ ] Incremental scanning
-- [ ] Cache scan results
-- [ ] 10x faster on large codebases
+### Platform Support
+- React Native Windows rules
+- React Native macOS rules
+- Electron security checks
 
----
+## Version 3.0 - Enterprise Features
 
-## ⚙️ v1.3.0 - Configuration & Customization (Q2 2025)
+### Team Collaboration
+- Centralized reporting dashboard
+- Team analytics and metrics
+- Issue assignment and tracking
+- Historical trend visualization
+- Compliance reporting (OWASP, PCI-DSS)
 
-**Focus: Flexibility & Integration**
+### Integration Ecosystem
+- Jira integration
+- Slack/Teams notifications
+- SonarQube plugin
+- Azure DevOps extension
+- GitLab Security Dashboard
 
-### Configuration File
-- [ ] `.rnsecrc` support (JSON/YAML)
-- [ ] Rule enable/disable
-- [ ] Custom severity levels
-- [ ] Ignore patterns
-- [ ] Team presets
+### Advanced Configuration
+- Organization-wide policies
+- Rule templates and sharing
+- Custom rule development API
+- Plugin architecture
+- Baseline management
 
-### IDE Integration
-- [ ] VS Code extension
-- [ ] Real-time inline warnings
-- [ ] Auto-fix suggestions
-- [ ] Quick actions
+## Future Considerations
 
-### CI/CD Integration
-- [ ] GitHub Actions marketplace action
-- [ ] GitLab CI template
-- [ ] CircleCI orb
-- [ ] Bitbucket Pipelines
-- [ ] SARIF output format
+### Research & Development
+- Machine learning for vulnerability detection
+- Natural language processing for code comments
+- Automated fix generation
+- Security training recommendations
+- Threat modeling integration
 
----
+### Community
+- Public rule repository
+- Community-contributed scanners
+- Security challenge platform
+- Best practices library
 
-## 🌍 v1.4.0 - Community & Ecosystem (Q3 2025)
+## Contributing to the Roadmap
 
-**Focus: Extensibility & Community**
+Have ideas for rnsec? We'd love to hear them!
 
-### Plugin System
-- [ ] Custom rule plugins
-- [ ] Community rule marketplace
-- [ ] Plugin API documentation
-- [ ] Example plugins
+- **Vote on features**: Star/react to issues labeled `enhancement`
+- **Suggest features**: Open an issue with the `feature request` template
+- **Contribute**: See [CONTRIBUTING.md](CONTRIBUTING.md) for how to implement features
 
-### Integrations
-- [ ] Slack notifications
-- [ ] Jira issue creation
-- [ ] SonarQube integration
-- [ ] Snyk integration
+## Release Schedule
 
-### Community Features
-- [ ] Rule suggestions from community
-- [ ] Public rule database
-- [ ] Shared configurations
-- [ ] Security benchmarks
+- **Minor releases**: Every 2-3 months
+- **Patch releases**: As needed for bugs
+- **Major releases**: Annually
 
----
+## Priority Levels
 
-## 🎨 v2.0.0 - Next Generation (Q4 2025)
+- **🔴 High**: Next release
+- **🟡 Medium**: Within 6 months
+- **🟢 Low**: Under consideration
 
-**Focus: Advanced Analysis & AI**
+## Current Priorities
 
-### Advanced Analysis
-- [ ] Data flow analysis
-- [ ] Inter-procedural analysis
-- [ ] Taint tracking
-- [ ] Control flow analysis
+| Feature | Priority | Target Version | Status |
+|---------|----------|----------------|--------|
+| Rule Configuration | 🔴 High | 2.0 | Planning |
+| VS Code Extension | 🔴 High | 2.0 | Planning |
+| Performance Optimization | 🟡 Medium | 2.1 | Research |
+| Advanced Detection | 🟡 Medium | 2.2 | Research |
+| Automated Testing | 🔴 High | 1.1 | In Progress |
 
-### AI-Powered Features
-- [ ] AI-assisted rule suggestions
-- [ ] Natural language rule queries
-- [ ] Auto-fix with AI
-- [ ] Explain security issues with AI
+## Questions?
 
-### Web Dashboard
-- [ ] Online report viewer
-- [ ] Team dashboards
-- [ ] Trend analysis
-- [ ] Security score tracking
-
-### Mobile App
-- [ ] iOS/Android app for viewing reports
-- [ ] Push notifications for new issues
-- [ ] Team collaboration
+For roadmap questions or suggestions:
+- Open a [GitHub Discussion](https://github.com/adnxy/rnsec/discussions)
+- Email: adnanpoviolabs@gmail.com
 
 ---
 
-## 🤝 Community Requests
+**Note**: This roadmap is subject to change based on community feedback and project priorities.
 
-**Vote on features**: https://github.com/adnxy/rnsec/discussions
-
-### Most Requested
-1. **IDE Extensions** (VS Code, IntelliJ)
-2. **Custom rules without plugins**
-3. **SARIF format support**
-4. **Faster scanning**
-5. **Auto-fix capabilities**
-
----
-
-## 🎓 Long-term Goals
-
-### Education
-- [ ] Security training courses
-- [ ] Best practices guide
-- [ ] Common vulnerabilities explained
-- [ ] Fix tutorials
-
-### Enterprise
-- [ ] Self-hosted version
-- [ ] SSO integration
-- [ ] Advanced reporting
-- [ ] Compliance reports (OWASP, PCI-DSS)
-
-### Research
-- [ ] Academic partnerships
-- [ ] Vulnerability research
-- [ ] Open security database
-- [ ] CVE tracking
-
----
-
-## 💬 Contributing to the Roadmap
-
-Have ideas? We'd love to hear them!
-
-1. **Vote** on existing features in [Discussions](https://github.com/adnxy/rnsec/discussions)
-2. **Propose** new features via [Feature Request](https://github.com/adnxy/rnsec/issues/new?template=feature_request.md)
-3. **Contribute** by picking up issues labeled `good-first-issue` or `help-wanted`
-
----
-
-## 📊 Success Metrics
-
-We measure success by:
-- **Adoption**: npm downloads & GitHub stars
-- **Quality**: False positive rate < 5%
-- **Performance**: Scan 1000 files in < 1 second
-- **Community**: Active contributors & discussions
-- **Impact**: Vulnerabilities prevented in production apps
-
----
-
-**Last Updated**: December 2024  
-**Status**: Active Development 🚀
-
-For questions about the roadmap: adnanpoviolabs@gmail.com
+Last updated: December 2024
 

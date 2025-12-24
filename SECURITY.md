@@ -1,137 +1,185 @@
 # Security Policy
 
-## 🔒 Reporting Security Vulnerabilities
+## Reporting Security Vulnerabilities
 
-**Please do not report security vulnerabilities through public GitHub issues.**
+The rnsec project takes security seriously. If you discover a security vulnerability in rnsec itself, we appreciate your help in disclosing it to us in a responsible manner.
 
-If you discover a security vulnerability in rnsec, please report it to us privately:
+### Please Do Not
+
+- Open a public GitHub issue for security vulnerabilities
+- Disclose the vulnerability publicly before we've had a chance to address it
+- Exploit the vulnerability beyond what is necessary to demonstrate it
 
 ### How to Report
 
-1. **Email**: Send details to **adnanpoviolabs@gmail.com**
-2. **Subject**: "[SECURITY] Brief description"
-3. **Include**:
-   - Type of vulnerability
-   - Full paths of source file(s) related to the issue
-   - Location of the affected code (tag/branch/commit)
-   - Step-by-step instructions to reproduce
-   - Proof-of-concept or exploit code (if possible)
-   - Impact of the issue
+**Email**: adnanpoviolabs@gmail.com
 
-### What to Expect
+**Subject Line**: `[SECURITY] Brief description of vulnerability`
 
-- **Acknowledgment**: Within 48 hours
-- **Initial Assessment**: Within 7 days
-- **Regular Updates**: Every 7 days until resolved
-- **Credit**: You'll be credited in the security advisory (unless you prefer to remain anonymous)
+### What to Include
 
-## ⚠️ Supported Versions
+When reporting a security vulnerability, please include:
+
+1. **Description**: A clear description of the vulnerability
+2. **Impact**: What an attacker could do with this vulnerability
+3. **Steps to Reproduce**: Detailed steps to reproduce the issue
+4. **Affected Versions**: Which versions of rnsec are affected
+5. **Suggested Fix**: If you have ideas for how to fix it
+6. **Contact Info**: How we can reach you for follow-up questions
+
+### Example Report
+
+```
+Subject: [SECURITY] Command Injection in File Scanner
+
+Description:
+The file scanning functionality is vulnerable to command injection when
+processing specially crafted file paths.
+
+Impact:
+An attacker could execute arbitrary commands on the system running rnsec
+by crafting a malicious project structure.
+
+Steps to Reproduce:
+1. Create a file with name: `; rm -rf /`
+2. Run rnsec scan on the directory
+3. Observe command execution
+
+Affected Versions:
+rnsec 1.0.0 and earlier
+
+Suggested Fix:
+Sanitize file paths before processing and use path.join() instead of
+string concatenation.
+
+Contact: security-researcher@example.com
+```
+
+## Our Commitment
+
+When you report a security vulnerability, we commit to:
+
+1. **Acknowledge receipt** within 48 hours
+2. **Provide a timeline** for fixing the issue within 7 days
+3. **Keep you informed** of our progress
+4. **Credit you** in our security advisories (if you wish)
+5. **Coordinate disclosure** with you before making the issue public
+
+## Security Update Process
+
+When we receive a security report:
+
+1. **Verification** (1-3 days): We verify the vulnerability
+2. **Fix Development** (1-7 days): We develop and test a fix
+3. **Release** (immediately after testing): We release a patch version
+4. **Advisory** (same day as release): We publish a security advisory
+5. **Notification**: We notify users through GitHub and npm
+
+## Supported Versions
+
+We support the following versions with security updates:
 
 | Version | Supported          |
 | ------- | ------------------ |
-| 1.x.x   | :white_check_mark: |
-| < 1.0   | :x:                |
+| 1.x.x   | ✅ Yes             |
+| < 1.0   | ❌ No              |
 
-## 🛡️ Security Considerations for rnsec
+We recommend always using the latest version of rnsec for the best security posture.
 
-### What rnsec Does
+## Security Best Practices for Users
 
-rnsec is a **static analysis tool** that:
-- Reads source code files locally
-- Analyzes code patterns
-- Generates reports (HTML/JSON)
-- Does NOT send data externally
-- Does NOT execute analyzed code
-- Does NOT require network access (except for npm install)
+When using rnsec:
 
-### Data Privacy
+### Do
 
-- **No telemetry**: We don't collect any usage data
-- **Local only**: All scanning happens on your machine
-- **No cloud**: No data is sent to external servers
-- **Report control**: You control where reports are saved
+- ✅ Keep rnsec updated to the latest version
+- ✅ Run rnsec in a sandboxed or isolated environment if scanning untrusted code
+- ✅ Review rnsec's output and reports manually
+- ✅ Use rnsec as part of a comprehensive security strategy
+- ✅ Report false positives or false negatives to help improve detection
 
-### Safe Usage
+### Don't
 
-✅ **Safe to use on:**
-- Private codebases
-- Proprietary code
-- Code with secrets (though we'll flag them!)
+- ❌ Run rnsec with elevated privileges unless necessary
+- ❌ Scan untrusted code without proper isolation
+- ❌ Rely solely on rnsec for security validation
+- ❌ Share generated reports that contain sensitive information publicly
+- ❌ Ignore rnsec findings without investigation
 
-⚠️ **Be careful with:**
-- Sharing HTML/JSON reports (they contain code snippets)
-- Committing reports to version control
-- Sharing reports publicly
+## Known Limitations
 
-### Known Limitations
+rnsec is a static analysis tool with inherent limitations:
 
-rnsec performs **static analysis** only:
-- Cannot detect runtime vulnerabilities
-- May have false positives/negatives
-- Requires manual review of findings
-- Should be part of a comprehensive security strategy
+- **Static Analysis Only**: Cannot detect runtime vulnerabilities
+- **Pattern-Based**: May produce false positives or miss context-specific issues
+- **No Code Execution**: Does not actually test for exploitability
+- **No Network Analysis**: Does not analyze actual network traffic
+- **Configuration Dependent**: Security issues configured outside the codebase are not detected
 
-## 🔐 Dependencies Security
+For comprehensive security, combine rnsec with:
+- Dynamic application security testing (DAST)
+- Manual security audits
+- Penetration testing
+- Security-focused code reviews
 
-We use:
-- Automated dependency scanning (Dependabot - planned)
-- Regular dependency updates
-- npm audit for vulnerability checking
+## Security Features in rnsec
 
-Run security audit:
-```bash
-npm audit
-```
+rnsec itself is designed with security in mind:
 
-## 🚨 Security Features in rnsec
+- **No External API Calls**: All analysis is performed locally
+- **No Data Collection**: No telemetry or data sent to external servers
+- **Read-Only Operations**: rnsec only reads files, never writes or modifies code
+- **Sandboxing**: File operations are limited to the scanned project
+- **No Code Execution**: Scanned code is never executed, only analyzed
 
-rnsec helps you find:
-- Hardcoded secrets and API keys
-- Insecure storage patterns
-- Weak cryptography
-- Network security issues
-- Authentication vulnerabilities
-- And 63+ other security issues
+## Vulnerability Disclosure Policy
 
-But remember: **rnsec is a tool to help you, not a replacement for security experts.**
+When we fix a security vulnerability:
 
-## 📋 Security Best Practices for Contributors
+### Timeline
 
-If you're contributing to rnsec:
+- **Day 0**: Vulnerability reported
+- **Day 1-2**: Acknowledgment sent to reporter
+- **Day 3-7**: Vulnerability verified and assessed
+- **Day 7-14**: Fix developed and tested
+- **Day 14**: Patch released, security advisory published
+- **Day 14+**: Public disclosure with full details
 
-1. **Never commit**:
-   - Real API keys or secrets
-   - Personal credentials
-   - Production configurations
+### Public Disclosure
 
-2. **Test files should**:
-   - Use obviously fake data (e.g., `sk_test_FAKE...`)
-   - Be in `examples/` directory
-   - Be documented as test data
+Our security advisories include:
 
-3. **Code reviews**:
-   - Are required for all changes
-   - Should check for security implications
-   - Must verify no sensitive data is included
+- CVE identifier (if applicable)
+- Affected versions
+- Severity rating (using CVSS)
+- Description of the vulnerability
+- Impact assessment
+- Remediation steps
+- Credit to the reporter (if desired)
+- Timeline of the fix
 
-## 🏅 Security Hall of Fame
+## Security Hall of Fame
 
-We'll recognize security researchers who responsibly disclose vulnerabilities:
+We recognize security researchers who help make rnsec more secure:
 
-*No vulnerabilities reported yet - be the first!*
+_No vulnerabilities reported yet. Be the first to help us improve!_
 
-## 📞 Contact
+## Questions?
 
-- **Security issues**: adnanpoviolabs@gmail.com
-- **General questions**: GitHub Issues
-- **Maintainer**: @adnxy
+For security-related questions that are not vulnerability reports:
 
-## 📝 Disclosure Policy
+- Open a [GitHub Discussion](https://github.com/adnxy/rnsec/discussions)
+- Email: adnanpoviolabs@gmail.com (for private matters)
 
-- We follow **coordinated disclosure**
-- We'll work with you to understand and fix the issue
-- We'll credit you in the security advisory
-- We'll publish the fix before disclosing details
+## PGP Key
 
-Thank you for helping keep rnsec and its users safe! 🙏
+For encrypted communications, use our PGP key:
+
+_PGP key to be published upon request_
+
+---
+
+**Thank you for helping keep rnsec and its users safe!**
+
+Last updated: December 2024
 

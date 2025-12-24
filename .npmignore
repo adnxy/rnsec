@@ -1,0 +1,44 @@
+# Source files (we only want dist/)
+src/
+tsconfig.json
+
+# Development files
+examples/
+.github/
+.vscode/
+.idea/
+
+# Test files
+tests/
+__tests__/
+*.test.js
+*.test.ts
+*.spec.js
+*.spec.ts
+
+# Documentation (keep only what's needed)
+ROADMAP.md
+CONTRIBUTING.md
+CODE_OF_CONDUCT.md
+
+# Build artifacts
+node_modules/
+coverage/
+*.log
+npm-debug.log*
+
+# IDE files
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Reports
+rnsec-report.html
+rnsec-report.json
+
+# Git files
+.git/
+.gitignore
+.gitattributes
+
