@@ -50,8 +50,7 @@
   "files": [
     "dist",
     "README.md",
-    "LICENSE",
-    "CHANGELOG.md"
+    "LICENSE"
   ],
   "dependencies": {
     "@babel/parser": "^7.26.3",
