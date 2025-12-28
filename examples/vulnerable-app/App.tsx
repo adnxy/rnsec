@@ -17,7 +17,6 @@ const encryptionConfig = {
   iv: 'initialization-vector-16',
 };
 
-
 const config = {
   // HARDCODED_SECRETS - Rule should detect this
   apiKey: 'sk_test_FAKE1234567890ABCDEFGHIJKLMNOP',
@@ -28,6 +27,8 @@ export default function App() {
   const [user, setUser] = React.useState<any>(null);
   const [password, setPassword] = React.useState('');
 
+  const mmkv = createMMKV();
+  mmkv.set('apiKey', config.apiKey);
   const saveUserToken = async () => {
     // ASYNCSTORAGE_SENSITIVE_KEY - Rule should detect this
     await AsyncStorage.setItem('user_token', JWT_TOKEN);
