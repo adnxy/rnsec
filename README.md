@@ -252,7 +252,44 @@ jobs:
       platform: android
     steps:
       - name: Security validation only
-        run: echo "Running security validation..." && npm install -g rnsec && echo "y" | rnsec scan --output security.json && echo "Security validation completed - issues logged in security.json"
+        run: |
+          echo "🔒 Running security validation..."
+          echo "Current directory: $(pwd)"
+          echo "Contents:"
+          ls -la
+          
+          # Look for project in current and parent directories
+          echo "🔍 Searching for project..."
+          
+          # Check current directory first
+          if [ -f "package.json" ]; then
+            PROJECT_DIR="."
+          else
+            # Check parent directory
+            if [ -f "../package.json" ]; then
+              PROJECT_DIR=".."
+            else
+              # Search recursively
+              PROJECT_DIR=$(find .. -name "package.json" -type f -printf '%h' | head -1)
+            fi
+          fi
+          
+          if [ -z "$PROJECT_DIR" ] || [ ! -f "$PROJECT_DIR/package.json" ]; then
+            echo "❌ No package.json found in any location"
+            echo "📁 Searching all directories:"
+            find .. -name "package.json" -type f 2>/dev/null || echo "No package.json found anywhere"
+            exit 1
+          fi
+          
+          echo "✅ Found project at: $PROJECT_DIR"
+          cd "$PROJECT_DIR"
+          echo "📁 Project contents:"
+          ls -la | head -10
+          
+          # Install dependencies and run security scan
+          npm install -g rnsec
+          echo "y" | rnsec scan --output security.json
+          echo "✅ Security validation completed"
 ```
 
 ### GitLab CI
