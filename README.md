@@ -202,17 +202,21 @@ Create `.github/workflows/security.yml`:
 
 ```yaml
 name: Security Scan
-on: [push, pull_request]
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
 
 jobs:
   security:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
       
       - name: Setup Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: '18'
       
@@ -223,13 +227,69 @@ jobs:
         run: rnsec scan --output security.json --silent
       
       - name: Upload reports
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         if: always()
         with:
           name: security-report
           path: |
             security.json
             rnsec-report.html
+```
+### EAS
+```yaml
+name: Security Scan
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  security_scan:
+    type: build
+    params:
+      platform: android
+    steps:
+      - name: Security validation only
+        run: |
+          echo "🔒 Running security validation..."
+          echo "Current directory: $(pwd)"
+          echo "Contents:"
+          ls -la
+          
+          # Look for project in current and parent directories
+          echo "🔍 Searching for project..."
+          
+          # Check current directory first
+          if [ -f "package.json" ]; then
+            PROJECT_DIR="."
+          else
+            # Check parent directory
+            if [ -f "../package.json" ]; then
+              PROJECT_DIR=".."
+            else
+              # Search recursively
+              PROJECT_DIR=$(find .. -name "package.json" -type f -printf '%h' | head -1)
+            fi
+          fi
+          
+          if [ -z "$PROJECT_DIR" ] || [ ! -f "$PROJECT_DIR/package.json" ]; then
+            echo "❌ No package.json found in any location"
+            echo "📁 Searching all directories:"
+            find .. -name "package.json" -type f 2>/dev/null || echo "No package.json found anywhere"
+            exit 1
+          fi
+          
+          echo "✅ Found project at: $PROJECT_DIR"
+          cd "$PROJECT_DIR"
+          echo "📁 Project contents:"
+          ls -la | head -10
+          
+          # Install dependencies and run security scan
+          npm install -g rnsec
+          echo "y" | rnsec scan --output security.json
+          echo "✅ Security validation completed"
 ```
 
 ### GitLab CI
