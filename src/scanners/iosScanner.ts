@@ -368,10 +368,10 @@ const insecureKeychainUsageRule: Rule = {
     }
 
     // Check for missing access control
-    const hasKeychainUsage = content.includes('SecItemAdd') || 
-                             content.includes('SecItemUpdate') ||
-                             content.includes('setGenericPassword') ||
-                             content.includes('Keychain.set');
+    const hasKeychainUsage = content.includes('\bSecItemAdd\b') || 
+                             content.includes('\bSecItemUpdate\b') ||
+                             content.includes('\bsetGenericPassword\b') ||
+                             content.includes('\bKeychain\.set\b');
     
     if (hasKeychainUsage) {
       const hasAccessControl = content.includes('kSecAttrAccessControl') ||
