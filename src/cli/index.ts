@@ -154,6 +154,11 @@ program
       if (spinner) {
         spinner.succeed(chalk.green(`Scan completed in ${(duration / 1000).toFixed(2)}s`));
       }
+      
+      // Show skipped files warning if any
+      if (scanResult.skippedFiles && scanResult.skippedFiles > 0 && !options.silent) {
+        console.log(chalk.yellow(`⚠️  ${scanResult.skippedFiles} file(s) skipped due to read errors (use RNSEC_VERBOSE=1 for details)`));
+      }
 
       const result: ScanResult = {
         findings: scanResult.findings,

@@ -11,6 +11,7 @@ import { isInDebugContext } from '../utils/stringUtils.js';
 export class RuleEngine {
   private ruleGroups: RuleGroup[] = [];
   private ignoredRules: Set<string> = new Set();
+  private skippedFiles: number = 0;
 
   /**
    * Register a group of security rules
@@ -53,8 +54,9 @@ export class RuleEngine {
   async runRulesOnProject(
     rootDir: string,
     progressCallback?: (progress: { current: number; total: number }) => void
-  ): Promise<{ findings: Finding[]; scannedFiles: number }> {
+  ): Promise<{ findings: Finding[]; scannedFiles: number; skippedFiles?: number }> {
     const allFindings: Finding[] = [];
+    this.skippedFiles = 0;
 
     const fileGroup = await walkProjectFiles(rootDir);
     const allFiles = [
@@ -77,7 +79,11 @@ export class RuleEngine {
       allFindings.push(...findings);
     }
 
-    return { findings: allFindings, scannedFiles: totalFiles };
+    return { 
+      findings: allFindings, 
+      scannedFiles: totalFiles,
+      skippedFiles: this.skippedFiles > 0 ? this.skippedFiles : undefined
+    };
   }
 
   /**
@@ -98,18 +104,23 @@ export class RuleEngine {
           const ruleFindings = await rule.apply(context);
           findings.push(...ruleFindings);
         } catch (error) {
-          // Log error but continue scanning
-          if (process.env.NODE_ENV !== 'production') {
-            console.error(`Error applying rule ${rule.id} to ${filePath}:`, error);
-          }
+          // Silently continue - rule errors shouldn't stop the scan
         }
       }
 
       // Post-process findings to detect debug context
       return this.enrichFindingsWithDebugContext(findings, fileContent);
-    } catch (error) {
-      // Log error but continue scanning other files
-      console.error(`Error scanning file ${filePath}:`, error);
+    } catch (error: any) {
+      // Show minimal warning for file read errors
+      this.skippedFiles++;
+      
+      const fileName = filePath.split('/').pop();
+      const errorType = error.code || error.message?.split(':')[0] || 'Error';
+      
+      if (process.env.RNSEC_VERBOSE) {
+        console.warn(`⚠️  Warning: Could not scan ${fileName} (${errorType})`);
+      }
+      
       return [];
     }
   }
