@@ -22,9 +22,10 @@ import { debugRules } from '../scanners/debugScanner.js';
 import { androidRules } from '../scanners/androidScanner.js';
 import { iosRules } from '../scanners/iosScanner.js';
 import { npmVulnerabilityRules, setNpmScannerConfig } from '../scanners/npmScanner.js';
-import type { ScanResult } from '../types/findings.js';
+import type { ScanResult, Finding } from '../types/findings.js';
 import { VERSION, DEFAULT_REPORT_FILENAMES, EXIT_CODES } from '../constants.js';
 import { readRnsecConfig } from '../utils/fileUtils.js';
+import { getChangedFiles, isGitRepository } from '../utils/gitUtils.js';
 
 const securityGradient = gradient(['#ff0000', '#ff6b6b', '#ff8888']);
 
@@ -36,6 +37,7 @@ interface ScanOptions {
   html?: string;
   output?: string;
   silent?: boolean;
+  changedFiles?: string;
 }
 
 /**
@@ -91,12 +93,26 @@ program
   .option('--html <filename>', 'Generate HTML report (e.g., report.html)')
   .option('--output <filename>', 'Save JSON results to file')
   .option('--silent', 'Suppress console output')
+  .option('--changed-files <ref>', 'Scan only files changed since git reference (branch, commit, or tag)')
   .action(async (options: ScanOptions) => {
     try {
       const targetPath = options.path;
       
       if (!options.silent && !options.json) {
         printBanner();
+      }
+
+      // Handle --changed-files option
+      if (options.changedFiles) {
+        const isGitRepo = await isGitRepository(targetPath);
+        if (!isGitRepo) {
+          console.error(chalk.red('Error: --changed-files option requires a git repository'));
+          process.exit(EXIT_CODES.ERROR);
+        }
+
+        if (!options.silent) {
+          console.log(chalk.cyan(`Scanning files changed since: ${options.changedFiles}`));
+        }
       }
 
       const engine = new RuleEngine();
@@ -143,11 +159,33 @@ program
         spinner.text = chalk.cyan('Analyzing source code...');
       }
 
-      const scanResult = await engine.runRulesOnProject(targetPath, (progress) => {
-        if (spinner) {
-          spinner.text = chalk.cyan(`Scanning: ${progress.current}/${progress.total} files`);
+      let scanResult: { findings: Finding[]; scannedFiles: number; skippedFiles?: number };
+
+      if (options.changedFiles) {
+        const changedFiles = await getChangedFiles(options.changedFiles, targetPath);
+        
+        if (changedFiles.length === 0) {
+          if (!options.silent) {
+            console.log(chalk.yellow('No files changed since the specified reference.'));
+          }
+          scanResult = { findings: [], scannedFiles: 0 };
+        } else {
+          if (!options.silent) {
+            console.log(chalk.cyan(`📁 Found ${changedFiles.length} changed file(s) to scan`));
+          }
+          scanResult = await engine.runRulesOnFiles(changedFiles, (progress) => {
+            if (spinner) {
+              spinner.text = chalk.cyan(`Scanning: ${progress.current}/${progress.total} files`);
+            }
+          });
         }
-      });
+      } else {
+        scanResult = await engine.runRulesOnProject(targetPath, (progress) => {
+          if (spinner) {
+            spinner.text = chalk.cyan(`Scanning: ${progress.current}/${progress.total} files`);
+          }
+        });
+      }
 
       const duration = Date.now() - startTime;
 
