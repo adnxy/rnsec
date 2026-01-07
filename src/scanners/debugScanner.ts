@@ -34,9 +34,9 @@ const testCredentialsRule: Rule = {
     }
 
     const testPatterns = [
-      { pattern: /(password|pass|pwd)[\s]*[:=][\s]*['"]?(test|demo|admin|password|123456|qwerty)/gi, type: 'password' },
-      { pattern: /(username|user|email)[\s]*[:=][\s]*['"]?(test|demo|admin|user@test\.com)/gi, type: 'username' },
-      { pattern: /test@(test|example)\.(com|org)/gi, type: 'email' },
+      { pattern: /(password|pass|pwd)[\s]*[:=][\s]*['"](test|demo|admin|password|123456|qwerty)/gi, type: 'password' },
+      { pattern: /(username|user|email)[\s]*[:=][\s]*['"](test|demo|admin|user@test\.com)/gi, type: 'username' },
+      { pattern: /['"]test@(test|example)\.(com|org)['"]/gi, type: 'email' },
       { pattern: /Bearer\s+test[a-zA-Z0-9]+/gi, type: 'token' },
     ];
 
