@@ -37,6 +37,20 @@ export class HtmlReporter {
     return grouped;
   }
 
+  private async getPackageVersion(): Promise<string> {
+    try {
+      const packageJsonPath = resolve(__dirname, "..", "..", "package.json");
+
+      const packageFile = JSON.parse(
+        await readFile(packageJsonPath, "utf8"),
+      ) as { version?: string };
+
+      return packageFile.version || "";
+    } catch {
+      return "";
+    }
+  }
+
   private async buildHtml(result: ScanResult): Promise<string> {
     const { findings } = result;
     const high = findings.filter((f) => f.severity === "HIGH");
@@ -45,10 +59,12 @@ export class HtmlReporter {
 
     const bodyContent = this.buildBodyContent(result, high, medium, low);
     const template = await this.loadTemplate();
+    const version = await this.getPackageVersion();
 
     return template
       .replace("{{REPORT_DATE}}", result.timestamp.toLocaleDateString())
-      .replace("{{BODY_CONTENT}}", bodyContent);
+      .replace("{{BODY_CONTENT}}", bodyContent)
+      .replace("{{VERSION}}", version);
   }
 
   private buildBodyContent(result: ScanResult, high: Finding[], medium: Finding[], low: Finding[]): string {
