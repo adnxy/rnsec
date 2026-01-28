@@ -4,6 +4,21 @@ import { parseJSFile, parseJsonSafe } from './astParser.js';
 import { readFileContent } from '../utils/fileUtils.js';
 import { walkProjectFiles } from './fileWalker.js';
 import { isInDebugContext } from '../utils/stringUtils.js';
+import { ScanCache } from './cache.js';
+import pLimit from 'p-limit';
+
+// Default concurrency for parallel file processing
+const DEFAULT_CONCURRENCY = 10;
+
+/**
+ * Extended scan result with cache statistics
+ */
+export interface ScanResult {
+  findings: Finding[];
+  scannedFiles: number;
+  skippedFiles?: number;
+  cachedFiles?: number;
+}
 
 /**
  * Rule engine responsible for running security rules against project files
@@ -13,6 +28,9 @@ export class RuleEngine {
   private ignoredRules: Set<string> = new Set();
   private skippedFiles: number = 0;
   private excludedPaths: string[] = [];
+  private concurrency: number = DEFAULT_CONCURRENCY;
+  private cache: ScanCache | null = null;
+  private cachedFiles: number = 0;
 
   /**
    * Register a group of security rules
@@ -55,6 +73,65 @@ export class RuleEngine {
   }
 
   /**
+   * Set concurrency level for parallel file processing
+   * @param concurrency - Number of files to process in parallel
+   */
+  setConcurrency(concurrency: number): void {
+    this.concurrency = Math.max(1, concurrency);
+  }
+
+  /**
+   * Get current concurrency level
+   * @returns Current concurrency setting
+   */
+  getConcurrency(): number {
+    return this.concurrency;
+  }
+
+  /**
+   * Enable caching for incremental scans
+   * @param projectDir - Project directory for cache storage
+   * @param version - Version string for cache invalidation
+   */
+  async enableCache(projectDir: string, version: string): Promise<void> {
+    this.cache = new ScanCache(projectDir, version);
+    await this.cache.load();
+  }
+
+  /**
+   * Disable caching
+   */
+  disableCache(): void {
+    this.cache = null;
+  }
+
+  /**
+   * Save cache to disk (call after scan completes)
+   */
+  async saveCache(): Promise<void> {
+    if (this.cache) {
+      await this.cache.save();
+    }
+  }
+
+  /**
+   * Clear the cache
+   */
+  async clearCache(): Promise<void> {
+    if (this.cache) {
+      this.cache.clear();
+      await this.cache.save();
+    }
+  }
+
+  /**
+   * Check if caching is enabled
+   */
+  isCacheEnabled(): boolean {
+    return this.cache !== null && this.cache.isEnabled();
+  }
+
+  /**
    * Get all registered rules from all rule groups, excluding ignored ones
    * @returns Array of all rules
    */
@@ -63,7 +140,7 @@ export class RuleEngine {
   }
 
   /**
-   * Run all registered rules on specific files
+   * Run all registered rules on specific files with parallel processing
    * @param filePaths - Array of specific file paths to scan
    * @param progressCallback - Optional callback for progress updates
    * @returns Scan results with findings and file count
@@ -71,32 +148,47 @@ export class RuleEngine {
   async runRulesOnFiles(
     filePaths: string[],
     progressCallback?: (progress: { current: number; total: number }) => void
-  ): Promise<{ findings: Finding[]; scannedFiles: number; skippedFiles?: number }> {
-    const allFindings: Finding[] = [];
+  ): Promise<ScanResult> {
     this.skippedFiles = 0;
+    this.cachedFiles = 0;
 
     const totalFiles = filePaths.length;
+    let completed = 0;
 
-    for (let i = 0; i < filePaths.length; i++) {
-      const filePath = filePaths[i];
-      
-      if (progressCallback) {
-        progressCallback({ current: i + 1, total: totalFiles });
-      }
+    // Create a limiter for controlled parallelism
+    const limit = pLimit(this.concurrency);
 
-      const findings = await this.scanFile(filePath);
-      allFindings.push(...findings);
-    }
+    // Create scan promises with concurrency control
+    const scanPromises = filePaths.map(filePath =>
+      limit(async () => {
+        const findings = await this.scanFile(filePath);
+        completed++;
+        
+        if (progressCallback) {
+          progressCallback({ current: completed, total: totalFiles });
+        }
+        
+        return findings;
+      })
+    );
+
+    // Execute all scans in parallel with concurrency limit
+    const results = await Promise.all(scanPromises);
+    const allFindings = results.flat();
+
+    // Save cache after scan
+    await this.saveCache();
 
     return { 
       findings: allFindings, 
       scannedFiles: totalFiles,
-      skippedFiles: this.skippedFiles > 0 ? this.skippedFiles : undefined
+      skippedFiles: this.skippedFiles > 0 ? this.skippedFiles : undefined,
+      cachedFiles: this.cachedFiles > 0 ? this.cachedFiles : undefined,
     };
   }
 
   /**
-   * Run all registered rules on a project
+   * Run all registered rules on a project with parallel processing
    * @param rootDir - Root directory of the project to scan
    * @param progressCallback - Optional callback for progress updates
    * @returns Scan results with findings and file count
@@ -104,9 +196,9 @@ export class RuleEngine {
   async runRulesOnProject(
     rootDir: string,
     progressCallback?: (progress: { current: number; total: number }) => void
-  ): Promise<{ findings: Finding[]; scannedFiles: number; skippedFiles?: number }> {
-    const allFindings: Finding[] = [];
+  ): Promise<ScanResult> {
     this.skippedFiles = 0;
+    this.cachedFiles = 0;
 
     const fileGroup = await walkProjectFiles(rootDir, this.excludedPaths);
     const allFiles = [
@@ -117,49 +209,70 @@ export class RuleEngine {
     ];
 
     const totalFiles = allFiles.length;
+    let completed = 0;
 
-    for (let i = 0; i < allFiles.length; i++) {
-      const filePath = allFiles[i];
+    // Create a limiter for controlled parallelism
+    const limit = pLimit(this.concurrency);
 
-      if (progressCallback) {
-        progressCallback({ current: i + 1, total: totalFiles });
-      }
+    // Create scan promises with concurrency control
+    const scanPromises = allFiles.map(filePath =>
+      limit(async () => {
+        const findings = await this.scanFile(filePath);
+        completed++;
+        
+        if (progressCallback) {
+          progressCallback({ current: completed, total: totalFiles });
+        }
+        
+        return findings;
+      })
+    );
 
-      const findings = await this.scanFile(filePath);
-      allFindings.push(...findings);
-    }
+    // Execute all scans in parallel with concurrency limit
+    const results = await Promise.all(scanPromises);
+    const allFindings = results.flat();
+
+    // Save cache after scan
+    await this.saveCache();
 
     return {
       findings: allFindings,
       scannedFiles: totalFiles,
-      skippedFiles: this.skippedFiles > 0 ? this.skippedFiles : undefined
+      skippedFiles: this.skippedFiles > 0 ? this.skippedFiles : undefined,
+      cachedFiles: this.cachedFiles > 0 ? this.cachedFiles : undefined,
     };
   }
 
   /**
    * Scan a single file with all applicable rules
+   * Uses cache when available to skip unchanged files
    * @param filePath - Path to the file to scan
    * @returns Array of findings for this file
    */
   private async scanFile(filePath: string): Promise<Finding[]> {
     try {
       const fileContent = await readFileContent(filePath);
-      const findings: Finding[] = [];
-
-      const context = await this.prepareContext(filePath, fileContent);
-      const applicableRules = this.getApplicableRules(filePath);
-
-      for (const rule of applicableRules) {
-        try {
-          const ruleFindings = await rule.apply(context);
-          findings.push(...ruleFindings);
-        } catch (error) {
-          // Silently continue - rule errors shouldn't stop the scan
+      
+      // Check cache first
+      if (this.cache) {
+        const contentHash = this.cache.getContentHash(fileContent);
+        
+        if (this.cache.isValid(filePath, contentHash)) {
+          const cachedFindings = this.cache.getFindings(filePath);
+          if (cachedFindings !== null) {
+            this.cachedFiles++;
+            return cachedFindings;
+          }
         }
+        
+        // Not cached or invalid - scan and cache
+        const findings = await this.scanFileContent(filePath, fileContent);
+        this.cache.set(filePath, contentHash, findings);
+        return findings;
       }
-
-      // Post-process findings to detect debug context
-      return this.enrichFindingsWithDebugContext(findings, fileContent);
+      
+      // No cache - scan directly
+      return this.scanFileContent(filePath, fileContent);
     } catch (error: any) {
       // Show minimal warning for file read errors
       this.skippedFiles++;
@@ -173,6 +286,31 @@ export class RuleEngine {
 
       return [];
     }
+  }
+
+  /**
+   * Scan file content with all applicable rules
+   * @param filePath - Path to the file
+   * @param fileContent - Content of the file
+   * @returns Array of findings for this file
+   */
+  private async scanFileContent(filePath: string, fileContent: string): Promise<Finding[]> {
+    const findings: Finding[] = [];
+
+    const context = await this.prepareContext(filePath, fileContent);
+    const applicableRules = this.getApplicableRules(filePath);
+
+    for (const rule of applicableRules) {
+      try {
+        const ruleFindings = await rule.apply(context);
+        findings.push(...ruleFindings);
+      } catch (error) {
+        // Silently continue - rule errors shouldn't stop the scan
+      }
+    }
+
+    // Post-process findings to detect debug context
+    return this.enrichFindingsWithDebugContext(findings, fileContent);
   }
 
   /**

@@ -8,13 +8,22 @@ examples/
 .vscode/
 .idea/
 
-# Test files
+# Test files - include all patterns to exclude from dist/
 tests/
 __tests__/
+**/__tests__/**
+dist/**/__tests__/**
+dist/core/__tests__/
+dist/utils/__tests__/
+**/*.test.js
+**/*.test.ts
 *.test.js
 *.test.ts
 *.spec.js
 *.spec.ts
+vitest.config.ts
+vitest.config.js
+coverage/
 
 # Documentation (keep only what's needed)
 ROADMAP.md
