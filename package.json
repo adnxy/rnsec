@@ -10,9 +10,11 @@
     "build": "tsc && cp src/core/template.html dist/core/template.html",
     "dev": "ts-node src/index.ts",
     "prepublishOnly": "npm run build",
-    "test": "echo \"Tests coming soon\" && exit 0",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
     "lint": "tsc --noEmit",
-    "clean": "rm -rf dist"
+    "clean": "rm -rf dist coverage"
   },
   "keywords": [
     "react-native",
@@ -49,6 +51,8 @@
   },
   "files": [
     "dist",
+    "!dist/**/__tests__",
+    "!dist/**/*.test.js",
     "README.md",
     "LICENSE"
   ],
@@ -61,14 +65,17 @@
     "commander": "^14.0.2",
     "fast-glob": "^3.3.3",
     "gradient-string": "^3.0.0",
-    "ora": "^9.0.0"
+    "ora": "^9.0.0",
+    "p-limit": "^7.2.0"
   },
   "devDependencies": {
     "@types/babel__traverse": "^7.20.6",
     "@types/commander": "^2.12.0",
     "@types/glob": "^8.1.0",
     "@types/node": "^24.10.1",
+    "@vitest/coverage-v8": "^4.0.18",
     "ts-node": "^10.9.2",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.18"
   }
 }

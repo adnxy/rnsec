@@ -38,6 +38,9 @@ interface ScanOptions {
   output?: string;
   silent?: boolean;
   changedFiles?: string;
+  cache?: boolean;
+  clearCache?: boolean;
+  concurrency?: number;
 }
 
 /**
@@ -94,6 +97,9 @@ program
   .option('--output <filename>', 'Save JSON results to file')
   .option('--silent', 'Suppress console output')
   .option('--changed-files <ref>', 'Scan only files changed since git reference (branch, commit, or tag)')
+  .option('--cache', 'Enable caching for faster incremental scans')
+  .option('--clear-cache', 'Clear the scan cache before scanning')
+  .option('--concurrency <number>', 'Number of files to scan in parallel (default: 10)', parseInt)
   .action(async (options: ScanOptions) => {
     try {
       const targetPath = options.path;
@@ -152,6 +158,31 @@ program
 
       registerAllRules(engine);
 
+      // Configure concurrency
+      if (options.concurrency && options.concurrency > 0) {
+        engine.setConcurrency(options.concurrency);
+        if (!options.silent && !options.json) {
+          console.log(chalk.yellow(`ℹ Concurrency set to ${options.concurrency}`));
+        }
+      }
+
+      // Enable caching if requested
+      if (options.cache) {
+        const { resolve } = await import('path');
+        const resolvedPath = resolve(targetPath);
+        await engine.enableCache(resolvedPath, VERSION);
+        
+        // Clear cache if requested
+        if (options.clearCache) {
+          await engine.clearCache();
+          if (!options.silent && !options.json) {
+            console.log(chalk.yellow('ℹ Cache cleared'));
+          }
+        } else if (!options.silent && !options.json) {
+          console.log(chalk.cyan('ℹ Caching enabled for faster incremental scans'));
+        }
+      }
+
       if (spinner) {
         spinner.succeed(chalk.green('Security rules loaded'));
         spinner = ora({
@@ -166,7 +197,7 @@ program
         spinner.text = chalk.cyan('Analyzing source code...');
       }
 
-      let scanResult: { findings: Finding[]; scannedFiles: number; skippedFiles?: number };
+      let scanResult: { findings: Finding[]; scannedFiles: number; skippedFiles?: number; cachedFiles?: number };
 
       if (options.changedFiles) {
         const changedFiles = await getChangedFiles(options.changedFiles, targetPath);
@@ -203,6 +234,11 @@ program
       // Show skipped files warning if any
       if (scanResult.skippedFiles && scanResult.skippedFiles > 0 && !options.silent) {
         console.log(chalk.yellow(`⚠️  ${scanResult.skippedFiles} file(s) skipped due to read errors (use RNSEC_VERBOSE=1 for details)`));
+      }
+
+      // Show cached files info if caching is enabled
+      if (scanResult.cachedFiles && scanResult.cachedFiles > 0 && !options.silent && !options.json) {
+        console.log(chalk.cyan(`⚡ ${scanResult.cachedFiles} file(s) loaded from cache`));
       }
 
       const result: ScanResult = {
