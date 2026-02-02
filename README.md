@@ -108,6 +108,7 @@ Options:
   -p, --path <path>      Project directory to scan (default: current directory)
   --html <filename>      Custom HTML report filename
   --output <filename>    Custom JSON report filename
+  --md <filename>        Generate Markdown report for PR comments
   --json                 Output JSON to console only (no files)
   --silent               Suppress console output
   --changed-files <ref>  Scan only files changed since git reference (branch, commit, or tag)
@@ -170,6 +171,87 @@ security-scan:
 - **PR-focused**: Perfect for pull request validation
 - **CI/CD optimized**: Reduces pipeline execution time
 - **Incremental security**: Focus on new security issues introduced in changes
+
+## GitHub PR Comments Integration
+
+Generate markdown reports that can be automatically posted as GitHub PR comments, bringing security results directly into your pull requests.
+
+### Usage
+
+```bash
+# Generate markdown report for PR comment
+rnsec scan --md security-report.md --silent
+
+# Combine with changed files for PR-focused scanning
+rnsec scan --changed-files main --md pr-security-report.md --silent
+```
+
+### GitHub Actions Workflow
+
+Create `.github/workflows/security-scan.yml`:
+
+```yaml
+name: 🔒 Security Scan
+
+on:
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  security-scan:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # Fetch full history for git diff
+    
+    - name: Install rnsec
+      run: npm install -g rnsec
+    
+    - name: Run security scan on changed files
+      run: |
+        # Generate markdown report for PR comment
+        rnsec scan --changed-files ${{ github.base_ref || 'main' }} --md security-report.md --silent
+      continue-on-error: true
+    
+    - name: Comment PR with security results
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const fs = require('fs');
+          
+          try {
+            const markdownReport = fs.readFileSync('security-report.md', 'utf8');
+            
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: markdownReport
+            });
+          } catch (error) {
+            console.log('No security report found:', error.message);
+          }
+```
+
+### Features
+
+- **📊 Rich formatting**: Tables, emojis, and structured sections
+- **🎯 Risk assessment**: Clear risk levels and recommendations
+- **📍 File locations**: Direct links to vulnerable code
+- **💡 Suggestions**: Actionable recommendations for each issue
+- **⚡ Performance metrics**: Scan duration and files scanned
+- **🔒 Security-focused**: Designed for security team review
+
+### Example PR Comment
+
+The markdown report includes:
+- Summary table with issue counts by severity
+- Detailed findings with file locations and suggestions
+- Risk assessment with clear action items
+- Performance metrics and scan information
 
 ## Configuration
 
