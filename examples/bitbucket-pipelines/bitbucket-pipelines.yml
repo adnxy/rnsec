@@ -1,0 +1,78 @@
+# Bitbucket Pipelines Security Scan Configuration
+# Add this to your bitbucket-pipelines.yml file
+
+image: node:18
+
+pipelines:
+  pull-requests:
+    '**':
+      - step:
+          name: Security Scan
+          caches:
+            - node
+          script:
+            # Install rnsec
+            - npm install -g rnsec
+            
+            # Run security scan on changed files
+            - |
+              if [ -n "$BITBUCKET_PR_DESTINATION_BRANCH" ]; then
+                rnsec scan --changed-files origin/$BITBUCKET_PR_DESTINATION_BRANCH --md security-report.md --output security-report.json --silent || true
+              else
+                rnsec scan --md security-report.md --output security-report.json --silent || true
+              fi
+            
+            # Post comment to pull request
+            - |
+              if [ -f security-report.md ]; then
+                REPORT=$(cat security-report.md)
+                
+                # Get existing comments
+                COMMENTS=$(curl -s -u "$BITBUCKET_USERNAME:$BITBUCKET_APP_PASSWORD" \
+                  "https://api.bitbucket.org/2.0/repositories/$BITBUCKET_REPO_FULL_NAME/pullrequests/$BITBUCKET_PR_ID/comments")
+                
+                # Find existing rnsec comment
+                EXISTING_COMMENT_ID=$(echo "$COMMENTS" | jq -r '.values[] | select(.content.raw | contains("<!-- rnsec-security-report -->")) | .id' | head -1)
+                
+                # Prepare comment body
+                COMMENT_BODY=$(jq -n --arg content "$REPORT" '{content: {raw: $content}}')
+                
+                if [ -n "$EXISTING_COMMENT_ID" ]; then
+                  # Update existing comment
+                  curl -X PUT -u "$BITBUCKET_USERNAME:$BITBUCKET_APP_PASSWORD" \
+                    -H "Content-Type: application/json" \
+                    -d "$COMMENT_BODY" \
+                    "https://api.bitbucket.org/2.0/repositories/$BITBUCKET_REPO_FULL_NAME/pullrequests/$BITBUCKET_PR_ID/comments/$EXISTING_COMMENT_ID"
+                  echo "Updated existing security report comment"
+                else
+                  # Create new comment
+                  curl -X POST -u "$BITBUCKET_USERNAME:$BITBUCKET_APP_PASSWORD" \
+                    -H "Content-Type: application/json" \
+                    -d "$COMMENT_BODY" \
+                    "https://api.bitbucket.org/2.0/repositories/$BITBUCKET_REPO_FULL_NAME/pullrequests/$BITBUCKET_PR_ID/comments"
+                  echo "Created new security report comment"
+                fi
+              fi
+          artifacts:
+            - security-report.md
+            - security-report.json
+
+  branches:
+    main:
+      - step:
+          name: Full Security Scan
+          caches:
+            - node
+          script:
+            - npm install -g rnsec
+            - rnsec scan --md security-report.md --html security-report.html --json security-report.json || true
+          artifacts:
+            - security-report.md
+            - security-report.html
+            - security-report.json
+
+# Required Bitbucket Repository Variables:
+# - BITBUCKET_USERNAME: Your Bitbucket username
+# - BITBUCKET_APP_PASSWORD: App password with PR read/write permissions
+#   Create at: Personal settings > App passwords > Create app password
+#   Permissions needed: Pull requests (Read and Write)
