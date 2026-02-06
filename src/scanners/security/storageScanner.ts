@@ -427,6 +427,135 @@ const insecureFileStorageRule: Rule = {
   },
 };
 
+const mmkvNoEncryptionRule: Rule = {
+  id: 'MMKV_NO_ENCRYPTION',
+  description: 'MMKV used without encryption for sensitive data',
+  severity: Severity.HIGH,
+  fileTypes: ['.js', '.jsx', '.ts', '.tsx'],
+  apply: async (context: RuleContext): Promise<Finding[]> => {
+    const findings: Finding[] = [];
+    
+    if (!context.ast) {
+      return findings;
+    }
+
+    // Track MMKV instances created without encryption
+    const unencryptedMmkvInstances = new Set<string>();
+
+    // Helper function to check if createMMKV has encryption
+    const hasEncryption = (configArg: any): boolean => {
+      if (!configArg || configArg.type !== 'ObjectExpression') {
+        return false;
+      }
+      
+      return configArg.properties.some((prop: any) => {
+        if (!prop.key) return false;
+        const keyName = prop.key.name || (prop.key.type === 'StringLiteral' ? prop.key.value : null);
+        return keyName === 'encryptionKey';
+      });
+    };
+
+    // First traversal: Collect all unencrypted MMKV instances
+    traverse(context.ast, {
+      VariableDeclarator(path: any) {
+        const { node } = path;
+        
+        // Check if this is a variable declaration with createMMKV()
+        if (
+          node.init &&
+          node.init.type === 'CallExpression' &&
+          node.init.callee.type === 'Identifier' &&
+          node.init.callee.name === 'createMMKV'
+        ) {
+          const configArg = node.init.arguments[0];
+          
+          // If no encryption and variable is an identifier, track it
+          if (!hasEncryption(configArg) && node.id.type === 'Identifier') {
+            unencryptedMmkvInstances.add(node.id.name);
+          }
+        }
+      },
+    });
+
+    // Second traversal: Find MMKV.set() calls with sensitive data
+    traverse(context.ast, {
+      CallExpression(path: any) {
+        const { node } = path;
+        
+        // Check for direct createMMKV().set() calls without encryption
+        if (
+          node.callee.type === 'MemberExpression' &&
+          node.callee.object.type === 'CallExpression' &&
+          node.callee.object.callee.type === 'Identifier' &&
+          node.callee.object.callee.name === 'createMMKV' &&
+          node.callee.property.type === 'Identifier' &&
+          node.callee.property.name === 'set'
+        ) {
+          const configArg = node.callee.object.arguments[0];
+          
+          if (!hasEncryption(configArg)) {
+            const keyArg = node.arguments[0];
+            
+            if (keyArg && keyArg.type === 'StringLiteral') {
+              const key = keyArg.value;
+              
+              if (containsSensitiveKeyword(key)) {
+                const line = getLineNumber(context.fileContent, node.start || 0);
+                
+                findings.push({
+                  ruleId: 'MMKV_NO_ENCRYPTION',
+                  description: `MMKV storing sensitive key "${key}" without encryption`,
+                  severity: Severity.HIGH,
+                  filePath: context.filePath,
+                  line,
+                  snippet: extractSnippet(context.fileContent, line),
+                  suggestion: 'Use MMKV with encryption: createMMKV({ encryptionKey: "your-encryption-key" }) or use expo-secure-store/react-native-keychain for sensitive data',
+                });
+              }
+            }
+          }
+        }
+        
+        // Check for MMKV.set() calls on tracked unencrypted instances
+        if (
+          node.callee.type === 'MemberExpression' &&
+          node.callee.object.type === 'Identifier' &&
+          node.callee.property.type === 'Identifier' &&
+          node.callee.property.name === 'set'
+        ) {
+          const mmkvVarName = node.callee.object.name;
+          
+          // Check if this MMKV instance was created without encryption
+          if (unencryptedMmkvInstances.has(mmkvVarName)) {
+            const keyArg = node.arguments[0];
+            
+            // Check if key contains sensitive keywords
+            if (keyArg && keyArg.type === 'StringLiteral') {
+              const key = keyArg.value;
+              
+              if (containsSensitiveKeyword(key)) {
+                const line = getLineNumber(context.fileContent, node.start || 0);
+                
+                findings.push({
+                  ruleId: 'MMKV_NO_ENCRYPTION',
+                  description: `MMKV storing sensitive key "${key}" without encryption`,
+                  severity: Severity.HIGH,
+                  filePath: context.filePath,
+                  line,
+                  snippet: extractSnippet(context.fileContent, line),
+                  suggestion: 'Use MMKV with encryption: createMMKV({ encryptionKey: "your-encryption-key" }) or use expo-secure-store/react-native-keychain for sensitive data',
+                });
+              }
+            }
+          }
+        }
+      },
+    });
+
+    return findings;
+  },
+};
+
 export const storageRules: RuleGroup = {
   category: RuleCategory.STORAGE,
   rules: [
@@ -436,5 +565,6 @@ export const storageRules: RuleGroup = {
     reduxPersistNoEncryptionRule,
     clipboardSensitiveDataRule,
     insecureFileStorageRule,
+    mmkvNoEncryptionRule,
   ],
 };

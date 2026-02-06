@@ -4,6 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 import { WebView } from 'react-native-webview';
 import CryptoJS from 'crypto-js';
+import { createMMKV } from 'react-native-mmkv';
 
 // HARDCODED_SECRETS - Rule should detect this
 const API_KEY = 'AKIAIOSFODNN7EXAMPLE';
@@ -26,6 +27,8 @@ export default function App() {
   const [user, setUser] = React.useState<any>(null);
   const [password, setPassword] = React.useState('');
 
+  const mmkv = createMMKV();
+  mmkv.set('apiKey', config.apiKey);
   const saveUserToken = async () => {
     // ASYNCSTORAGE_SENSITIVE_KEY - Rule should detect this
     await AsyncStorage.setItem('user_token', JWT_TOKEN);
