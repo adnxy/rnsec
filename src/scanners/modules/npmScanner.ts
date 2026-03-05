@@ -213,6 +213,74 @@ function findPackageLine(content: string, packageName: string): number {
   return 1;
 }
 
+/**
+ * Find the line number where a scripts key (e.g. postinstall) appears in package.json
+ */
+function findScriptKeyLine(content: string, scriptKey: string): number {
+  const lines = content.split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i].includes(`"${scriptKey}"`)) {
+      return i + 1;
+    }
+  }
+  return 1;
+}
+
+/**
+ * Supply chain: detect suspicious lifecycle scripts (postinstall/preinstall) that run
+ * node on non-standard paths or use || true to hide failures (common in malicious commits).
+ */
+const suspiciousLifecycleScriptRule: Rule = {
+  id: 'SUSPICIOUS_LIFECYCLE_SCRIPT',
+  description: 'Suspicious npm lifecycle script - possible supply chain attack',
+  severity: Severity.HIGH,
+  fileTypes: ['package.json'],
+  apply: async (context: RuleContext): Promise<Finding[]> => {
+    const findings: Finding[] = [];
+
+    if (!context.config || !context.filePath.endsWith('package.json')) {
+      return findings;
+    }
+
+    const scripts = context.config.scripts as Record<string, string> | undefined;
+    if (!scripts || typeof scripts !== 'object') {
+      return findings;
+    }
+
+    const lifecycleHooks = ['postinstall', 'preinstall', 'install'];
+    const suspiciousPatterns = [
+      /.github\/workflows\/.*\.js/,           // script in workflows dir (e.g. deploy.js)
+      /(^|\s)node\s+.*preinstall\.js/,       // node preinstall.js
+      /(^|\s)node\s+.*postinstall\.js/,      // node postinstall.js
+      /\|\|\s*true\s*$/,                     // || true hides script failure
+    ];
+
+    for (const hook of lifecycleHooks) {
+      const script = scripts[hook];
+      if (typeof script !== 'string') continue;
+
+      const scriptNorm = script.trim();
+      const isSuspicious = suspiciousPatterns.some((re) => re.test(scriptNorm));
+
+      if (isSuspicious) {
+        const lineNum = findScriptKeyLine(context.fileContent, hook);
+        findings.push({
+          ruleId: 'SUSPICIOUS_LIFECYCLE_SCRIPT',
+          description: `Suspicious "${hook}" script - may indicate supply chain attack (runs node on workflow/install script or hides errors with || true)`,
+          severity: Severity.HIGH,
+          filePath: context.filePath,
+          line: lineNum,
+          snippet: extractSnippet(context.fileContent, lineNum),
+          suggestion: 'Review lifecycle scripts. Remove any postinstall/preinstall that run .github/workflows/*.js or root install scripts. Do not use || true to hide failures. Ensure repo and npm tokens are not compromised.',
+          category: 'npm',
+        });
+      }
+    }
+
+    return findings;
+  },
+};
+
 const packageJsonVulnerabilityRule: Rule = {
   id: 'NPM_VULNERABLE_DEPENDENCY',
   description: 'Vulnerable npm package detected in dependencies',
@@ -374,5 +442,6 @@ export const npmVulnerabilityRules: RuleGroup = {
   rules: [
     packageJsonVulnerabilityRule,
     deprecatedPackagesRule,
+    suspiciousLifecycleScriptRule,
   ],
 };

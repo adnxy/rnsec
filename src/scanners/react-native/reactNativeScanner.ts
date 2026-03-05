@@ -443,6 +443,67 @@ const evalUsageRule: Rule = {
   },
 };
 
+/**
+ * Supply chain: detect eval(Buffer.from(...).toString('utf-8')) pattern used in
+ * obfuscated malicious install scripts (e.g. preinstall.js / postinstall payloads).
+ */
+const obfuscatedEvalExecutionRule: Rule = {
+  id: 'OBFUSCATED_EVAL_EXECUTION',
+  description: 'eval() with Buffer.from decode - likely supply chain malware',
+  severity: Severity.HIGH,
+  fileTypes: ['.js', '.jsx', '.ts', '.tsx'],
+  apply: async (context: RuleContext): Promise<Finding[]> => {
+    const findings: Finding[] = [];
+
+    if (!context.ast) {
+      return findings;
+    }
+
+    traverse(context.ast, {
+      CallExpression(path: any) {
+        const { node } = path;
+
+        if (
+          node.callee.type === 'Identifier' &&
+          node.callee.name === 'eval' &&
+          node.arguments.length > 0
+        ) {
+          const arg = node.arguments[0];
+          // Match: eval(Buffer.from(...).toString('utf-8')) or similar
+          if (arg.type === 'CallExpression' && arg.callee.type === 'MemberExpression') {
+            const member = arg.callee;
+            const obj = member.object;
+            const prop = member.property;
+            if (
+              prop.type === 'Identifier' &&
+              prop.name === 'toString' &&
+              obj.type === 'CallExpression' &&
+              obj.callee.type === 'MemberExpression' &&
+              obj.callee.object.type === 'Identifier' &&
+              obj.callee.object.name === 'Buffer' &&
+              obj.callee.property.type === 'Identifier' &&
+              obj.callee.property.name === 'from'
+            ) {
+              const line = getLineNumber(context.fileContent, node.start || 0);
+              findings.push({
+                ruleId: 'OBFUSCATED_EVAL_EXECUTION',
+                description: 'eval() with Buffer.from().toString() - obfuscated execution, common in supply chain / malicious install scripts',
+                severity: Severity.HIGH,
+                filePath: context.filePath,
+                line,
+                snippet: extractSnippet(context.fileContent, line),
+                suggestion: 'Remove this pattern. Decoding and eval-ing content is a common malware technique. If this is in a lifecycle script (preinstall/postinstall), treat as compromise and remove the script.',
+              });
+            }
+          }
+        }
+      },
+    });
+
+    return findings;
+  },
+};
+
 const rootJailbreakDetectionAbsentRule: Rule = {
   id: 'ROOT_JAILBREAK_DETECTION_ABSENT',
   description: 'Sensitive app without root/jailbreak detection',
@@ -693,6 +754,7 @@ export const reactNativeRules: RuleGroup = {
     unsafeDangerouslySetInnerHtmlRule,
     networkLoggerInProductionRule,
     evalUsageRule,
+    obfuscatedEvalExecutionRule,
     rootJailbreakDetectionAbsentRule,
     missingRuntimeIntegrityChecksRule,
     insecureDeserializationRule,

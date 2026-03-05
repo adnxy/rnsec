@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.2.0] - 2026-03-05
+
+### Supply chain security rules
+
+This release adds **2 new rules** to detect supply chain–style risks: malicious or hijacked commits that add dangerous install scripts (e.g. postinstall/preinstall running obfuscated code).
+
+### Added
+
+1. **SUSPICIOUS_LIFECYCLE_SCRIPT** (package.json) – HIGH
+   - Flags `postinstall`, `preinstall`, or `install` scripts that run `node` on:
+     - A file under `.github/workflows/*.js` (e.g. `node ./.github/workflows/deploy.js`)
+     - Root-level `preinstall.js` or `postinstall.js`
+   - Flags any such script ending with `|| true` (hides script failure; common in malicious commits)
+
+2. **OBFUSCATED_EVAL_EXECUTION** (JS/TS) – HIGH
+   - Detects `eval(Buffer.from(...).toString('utf-8'))` (or equivalent), the pattern used in many malicious install scripts to run decoded payloads
+
+### Other
+
+- Added test fixture `examples/supply-chain-test/` for validating these rules (do not run `npm install` there)
+- Documentation: DEVELOPMENT.md updated with how to test supply-chain rules
+
+---
+
 ## [1.1.0] - 2026-01-18
 
 ### Major Feature Release

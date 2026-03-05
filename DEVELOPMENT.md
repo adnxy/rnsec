@@ -28,6 +28,16 @@ node dist/index.js scan --path examples/vulnerable-app
 node dist/index.js scan --path examples/secure-app
 ```
 
+#### Test supply-chain rules (SUSPICIOUS_LIFECYCLE_SCRIPT, OBFUSCATED_EVAL_EXECUTION)
+```bash
+node dist/index.js scan --path examples/supply-chain-test
+```
+Or with JSON output to inspect findings:
+```bash
+node dist/index.js scan --path examples/supply-chain-test --json
+```
+The fixture in `examples/supply-chain-test/` contains a `package.json` with suspicious lifecycle scripts and a `preinstall.js` with the `eval(Buffer.from(...).toString())` pattern. Do not run `npm install` in that directory.
+
 #### Test All Commands
 ```bash
 # Check version

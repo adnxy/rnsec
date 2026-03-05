@@ -1,3 +1,29 @@
+# 🚀 rnsec 1.2.0 Release Notes
+
+**Release Date**: March 5, 2026
+
+This release adds **2 new supply chain security rules** to help catch malicious or hijacked commits that introduce dangerous install scripts (e.g. postinstall/preinstall running obfuscated code to exfiltrate data or run unwanted code on `npm install`).
+
+---
+
+## 🌟 What's New
+
+### ✨ Supply chain rules (2 new)
+
+**1. SUSPICIOUS_LIFECYCLE_SCRIPT** (package.json) – HIGH  
+Flags lifecycle scripts that are commonly abused in supply chain attacks:
+
+- `postinstall` / `preinstall` / `install` that run `node` on a file under `.github/workflows/*.js` (e.g. `node ./.github/workflows/deploy.js`)
+- Scripts that run root-level `preinstall.js` or `postinstall.js`
+- Any of the above ending with `|| true` (hides script failure)
+
+**2. OBFUSCATED_EVAL_EXECUTION** (JS/TS) – HIGH  
+Detects the pattern `eval(Buffer.from(...).toString('utf-8'))`, which is often used in malicious install scripts to decode and execute a payload.
+
+**How to test:** Run `rnsec scan --path examples/supply-chain-test` (do not run `npm install` in that directory).
+
+---
+
 # 🚀 rnsec 1.1.0 Release Notes
 
 **Release Date**: January 18, 2026
@@ -6,7 +32,7 @@ We're excited to announce **rnsec 1.1.0** - a major feature release that signifi
 
 ---
 
-## 🌟 What's New
+## 🌟 What's New (1.1.0)
 
 ### ✨ 16 New Security Rules
 
