@@ -356,7 +356,7 @@ rnsec implements 63 security rules covering:
 
 | Category | Rules | Description |
 |----------|-------|-------------|
-| **Storage** | 6 | AsyncStorage security, encryption requirements, PII handling |
+| **Storage** | 7 | AsyncStorage security, encryption requirements, PII handling, Unencrypted MMKV |
 | **Network** | 13 | HTTP connections, SSL/TLS validation, WebView security |
 | **Authentication** | 6 | JWT handling, OAuth implementation, biometric authentication |
 | **Secrets** | 2 | API key detection (27+ patterns), hardcoded credentials |
