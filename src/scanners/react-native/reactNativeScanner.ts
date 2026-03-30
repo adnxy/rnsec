@@ -380,7 +380,7 @@ const networkLoggerInProductionRule: Rule = {
           const code = context.fileContent.substring(start, end).toLowerCase();
           
           const hasInterceptor = /interceptor|request|response/i.test(code);
-          const hasLogging = /console\.log|logger|debug|\.data|\.headers/i.test(code);
+          const hasLogging = /console\.(log|warn|error|info|debug)|logger\.|debug\(/i.test(code);
           const hasDevCheck = /__DEV__|process\.env\.NODE_ENV.*development/i.test(code);
           
           if (hasInterceptor && hasLogging && !hasDevCheck) {
