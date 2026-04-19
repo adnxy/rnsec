@@ -31,6 +31,9 @@ coverage/
 *.tmp
 .cache/
 
+# npm pack output
+*.tgz
+
 
 
 

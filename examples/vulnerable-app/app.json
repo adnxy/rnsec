@@ -13,6 +13,15 @@
     },
     "ios": {
       "bundleIdentifier": "com.example.vulnerableapp"
+    },
+    "updates": {
+      "url": "http://updates.example.com/manifest"
+    },
+    "runtimeVersion": "1.0.0",
+    "plugins": ["expo-updates"],
+    "extra": {
+      "apiSecret": "sk_live_real_secret_key_12345",
+      "client_secret": "supersecretclientvalue9999"
     }
   }
 }

@@ -5,6 +5,7 @@ import axios from 'axios';
 import { WebView } from 'react-native-webview';
 import CryptoJS from 'crypto-js';
 import { createMMKV } from 'react-native-mmkv';
+import { useAuthRequest } from 'expo-auth-session';
 
 // HARDCODED_SECRETS - Rule should detect this
 const API_KEY = 'AKIAIOSFODNN7EXAMPLE';
@@ -69,6 +70,38 @@ export default function App() {
       console.log('Opening:', url);
     });
   };
+
+  // INSECURE_LINKING_OPEN - Rule should detect this
+  const openExternalUrl = (url: string) => {
+    Linking.openURL(url);
+  };
+
+  // SENSITIVE_NAVIGATION_PARAMS - Rule should detect this
+  const goToProfile = (navigation: any) => {
+    navigation.navigate('Profile', { token: 'abc123', password: 'secret' });
+  };
+
+  // EXPO_AUTH_SESSION_NO_PKCE - Rule should detect this
+  const [request, response, promptAsync] = useAuthRequest({
+    clientId: 'my-client-id',
+    usePKCE: false,
+    redirectUri: 'myapp://redirect',
+  });
+
+  // INSECURE_WEBSOCKET - Rule should detect this
+  const ws = new WebSocket('ws://api.example.com/socket');
+
+  // HARDCODED_IP_ADDRESS - Rule should detect this
+  const API_URL = 'http://203.0.113.50:8080/api/v1';
+
+  // CUSTOM_CRYPTO_IMPLEMENTATION - Rule should detect this
+  function customEncrypt(data: string, key: string): string {
+    let result = '';
+    for (let i = 0; i < data.length; i++) {
+      result += String.fromCharCode(data.charCodeAt(i) ^ key.charCodeAt(i % key.length));
+    }
+    return result;
+  }
 
   const deleteAccount = () => {
     // TOUCHABLEOPACITY_SENSITIVE_ACTION - Rule should detect this
@@ -152,6 +185,12 @@ export default function App() {
         source={{ uri: 'https://example.com' }}
         javaScriptEnabled={true}
         originWhitelist={['*']}
+      />
+
+      {/* ANDROID_WEBVIEW_DEBUG_ENABLED - Rule should detect this */}
+      <WebView
+        source={{ uri: 'https://example.com' }}
+        webContentsDebuggingEnabled={true}
       />
     </View>
   );
