@@ -246,37 +246,33 @@ const iosKeychainAccessGroupInsecureRule: Rule = {
 
 const iosDataProtectionMissingRule: Rule = {
   id: 'IOS_DATA_PROTECTION_MISSING',
-  description: 'Data protection entitlement not configured for sensitive app',
-  severity: Severity.LOW,
+  description: 'App explicitly uses NSFileProtectionNone - files are not encrypted at rest',
+  severity: Severity.MEDIUM,
   fileTypes: ['.plist', '.entitlements'],
   apply: async (context: RuleContext): Promise<Finding[]> => {
     const findings: Finding[] = [];
-    
+
     if (!context.plistContent) {
       return findings;
     }
 
-    const hasDataProtection = context.plistContent.includes('NSFileProtectionComplete') ||
-                              context.plistContent.includes('com.apple.developer.default-data-protection');
+    // Only flag explicit use of NSFileProtectionNone which disables encryption.
+    // iOS defaults to NSFileProtectionCompleteUntilFirstUserAuthentication since iOS 7,
+    // which is secure for most apps. Apple recommends against using the global
+    // com.apple.developer.default-data-protection entitlement as it can break
+    // background processing. Sensitive data should use Keychain (covered by
+    // INSECURE_KEYCHAIN_USAGE) rather than file-level protection entitlements.
+    const hasInsecureProtection = context.plistContent.includes('NSFileProtectionNone');
 
-    const sensitiveIndicators = [
-      'NSCameraUsageDescription',
-      'NSLocationAlwaysUsageDescription',
-      'NSHealthShareUsageDescription',
-      'NSFaceIDUsageDescription',
-    ];
-
-    const hasSensitiveFeatures = sensitiveIndicators.some(indicator => 
-      context.plistContent?.includes(indicator)
-    );
-
-    if (hasSensitiveFeatures && !hasDataProtection) {
+    if (hasInsecureProtection) {
       findings.push({
         ruleId: 'IOS_DATA_PROTECTION_MISSING',
-        description: 'Sensitive app without data protection entitlement',
-        severity: Severity.LOW,
+        description: 'App explicitly uses NSFileProtectionNone - files are not encrypted at rest',
+        severity: Severity.MEDIUM,
         filePath: context.filePath,
-        suggestion: 'Enable data protection (NSFileProtectionComplete) to encrypt files when device is locked.',
+        suggestion: 'Remove NSFileProtectionNone. iOS defaults to NSFileProtectionCompleteUntilFirstUserAuthentication which encrypts files at rest. ' +
+          'For sensitive data, use Keychain (react-native-keychain/expo-secure-store) with appropriate accessControl. ' +
+          'For sensitive files, set protection per-file using FileManager attributes.',
       });
     }
 
