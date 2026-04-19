@@ -556,15 +556,250 @@ const mmkvNoEncryptionRule: Rule = {
   },
 };
 
+const unencryptedRealmDatabaseRule: Rule = {
+  id: 'UNENCRYPTED_REALM_DATABASE',
+  description: 'Realm database opened without encryption in sensitive context',
+  severity: Severity.HIGH,
+  fileTypes: ['.js', '.jsx', '.ts', '.tsx'],
+  apply: async (context: RuleContext): Promise<Finding[]> => {
+    const findings: Finding[] = [];
+
+    if (!context.ast) {
+      return findings;
+    }
+
+    traverse(context.ast, {
+      CallExpression(path: any) {
+        const { node } = path;
+
+        // Check for Realm.open({ ... }) without encryptionKey
+        if (
+          node.callee.type === 'MemberExpression' &&
+          node.callee.object.type === 'Identifier' &&
+          node.callee.object.name === 'Realm' &&
+          node.callee.property.type === 'Identifier' &&
+          node.callee.property.name === 'open'
+        ) {
+          const configArg = node.arguments[0];
+
+          if (configArg && configArg.type === 'ObjectExpression') {
+            const hasEncryption = configArg.properties.some((prop: any) =>
+              prop.key && (prop.key.name === 'encryptionKey' || prop.key.value === 'encryptionKey')
+            );
+
+            if (!hasEncryption) {
+              const surroundingCode = context.fileContent.substring(
+                Math.max(0, (node.start || 0) - 300),
+                Math.min(context.fileContent.length, (node.end || 0) + 100)
+              ).toLowerCase();
+
+              const sensitivePatterns = ['user', 'auth', 'token', 'payment', 'credential', 'account', 'profile', 'medical', 'health'];
+              const hasSensitiveContext = sensitivePatterns.some(p => surroundingCode.includes(p));
+
+              if (hasSensitiveContext) {
+                const line = getLineNumber(context.fileContent, node.start || 0);
+
+                findings.push({
+                  ruleId: 'UNENCRYPTED_REALM_DATABASE',
+                  description: 'Realm database storing sensitive data without encryption',
+                  severity: Severity.HIGH,
+                  filePath: context.filePath,
+                  line,
+                  snippet: extractSnippet(context.fileContent, line),
+                  suggestion: 'Add encryptionKey to Realm.open() config to encrypt the database at rest. Generate a 64-byte encryption key and store it securely.',
+                });
+              }
+            }
+          }
+        }
+      },
+
+      NewExpression(path: any) {
+        const { node } = path;
+
+        // Check for new Realm({ ... }) without encryptionKey
+        if (
+          node.callee.type === 'Identifier' &&
+          node.callee.name === 'Realm'
+        ) {
+          const configArg = node.arguments[0];
+
+          if (configArg && configArg.type === 'ObjectExpression') {
+            const hasEncryption = configArg.properties.some((prop: any) =>
+              prop.key && (prop.key.name === 'encryptionKey' || prop.key.value === 'encryptionKey')
+            );
+
+            if (!hasEncryption) {
+              const surroundingCode = context.fileContent.substring(
+                Math.max(0, (node.start || 0) - 300),
+                Math.min(context.fileContent.length, (node.end || 0) + 100)
+              ).toLowerCase();
+
+              const sensitivePatterns = ['user', 'auth', 'token', 'payment', 'credential', 'account', 'profile', 'medical', 'health'];
+              const hasSensitiveContext = sensitivePatterns.some(p => surroundingCode.includes(p));
+
+              if (hasSensitiveContext) {
+                const line = getLineNumber(context.fileContent, node.start || 0);
+
+                findings.push({
+                  ruleId: 'UNENCRYPTED_REALM_DATABASE',
+                  description: 'Realm database storing sensitive data without encryption',
+                  severity: Severity.HIGH,
+                  filePath: context.filePath,
+                  line,
+                  snippet: extractSnippet(context.fileContent, line),
+                  suggestion: 'Add encryptionKey to Realm config to encrypt the database at rest.',
+                });
+              }
+            }
+          }
+        }
+      },
+    });
+
+    return findings;
+  },
+};
+
+const unencryptedSqliteDatabaseRule: Rule = {
+  id: 'UNENCRYPTED_SQLITE_DATABASE',
+  description: 'SQLite database used without encryption for sensitive data',
+  severity: Severity.HIGH,
+  fileTypes: ['.js', '.jsx', '.ts', '.tsx'],
+  apply: async (context: RuleContext): Promise<Finding[]> => {
+    const findings: Finding[] = [];
+
+    if (!context.ast) {
+      return findings;
+    }
+
+    traverse(context.ast, {
+      CallExpression(path: any) {
+        const { node } = path;
+
+        // Check for SQLite.openDatabase() or openDatabaseAsync() or expo-sqlite
+        const isSqliteOpen =
+          (node.callee.type === 'MemberExpression' &&
+           node.callee.property.type === 'Identifier' &&
+           (node.callee.property.name === 'openDatabase' || node.callee.property.name === 'openDatabaseAsync')) ||
+          (node.callee.type === 'Identifier' &&
+           (node.callee.name === 'openDatabase' || node.callee.name === 'openDatabaseAsync'));
+
+        if (isSqliteOpen) {
+          const surroundingCode = context.fileContent.substring(
+            Math.max(0, (node.start || 0) - 400),
+            Math.min(context.fileContent.length, (node.end || 0) + 400)
+          ).toLowerCase();
+
+          const hasEncryption =
+            surroundingCode.includes('sqlcipher') ||
+            surroundingCode.includes('encrypt') ||
+            surroundingCode.includes('cipher') ||
+            surroundingCode.includes('pragma key');
+
+          const sensitivePatterns = ['user', 'auth', 'token', 'payment', 'credential', 'account', 'password', 'medical', 'health', 'session'];
+          const hasSensitiveContext = sensitivePatterns.some(p => surroundingCode.includes(p));
+
+          if (hasSensitiveContext && !hasEncryption) {
+            const line = getLineNumber(context.fileContent, node.start || 0);
+
+            findings.push({
+              ruleId: 'UNENCRYPTED_SQLITE_DATABASE',
+              description: 'SQLite database storing sensitive data without encryption',
+              severity: Severity.HIGH,
+              filePath: context.filePath,
+              line,
+              snippet: extractSnippet(context.fileContent, line),
+              suggestion: 'Use SQLCipher or an encrypted SQLite wrapper to encrypt the database at rest. Plain SQLite databases can be extracted and read.',
+            });
+          }
+        }
+      },
+    });
+
+    return findings;
+  },
+};
+
+const expoSecureStoreWeakOptionsRule: Rule = {
+  id: 'EXPO_SECURE_STORE_WEAK_OPTIONS',
+  description: 'Expo SecureStore used with weak security options',
+  severity: Severity.MEDIUM,
+  fileTypes: ['.js', '.jsx', '.ts', '.tsx'],
+  apply: async (context: RuleContext): Promise<Finding[]> => {
+    const findings: Finding[] = [];
+
+    if (!context.ast) {
+      return findings;
+    }
+
+    traverse(context.ast, {
+      CallExpression(path: any) {
+        const { node } = path;
+
+        // Check for SecureStore.setItemAsync with AFTER_FIRST_UNLOCK
+        if (
+          node.callee.type === 'MemberExpression' &&
+          node.callee.object.type === 'Identifier' &&
+          node.callee.object.name === 'SecureStore' &&
+          node.callee.property.type === 'Identifier' &&
+          node.callee.property.name === 'setItemAsync'
+        ) {
+          const optionsArg = node.arguments[2];
+
+          if (optionsArg && optionsArg.type === 'ObjectExpression') {
+            for (const prop of optionsArg.properties) {
+              if (
+                prop.key &&
+                (prop.key.name === 'keychainAccessible' || prop.key.value === 'keychainAccessible') &&
+                prop.value
+              ) {
+                const valueCode = context.fileContent.substring(
+                  prop.value.start || 0,
+                  prop.value.end || 0
+                );
+
+                if (valueCode.includes('AFTER_FIRST_UNLOCK') || valueCode.includes('ALWAYS')) {
+                  const keyArg = node.arguments[0];
+                  const keyName = keyArg && keyArg.type === 'StringLiteral' ? keyArg.value : 'unknown';
+
+                  if (containsSensitiveKeyword(keyName)) {
+                    const line = getLineNumber(context.fileContent, node.start || 0);
+
+                    findings.push({
+                      ruleId: 'EXPO_SECURE_STORE_WEAK_OPTIONS',
+                      description: `SecureStore storing "${keyName}" with weak accessibility - accessible while device is locked`,
+                      severity: Severity.MEDIUM,
+                      filePath: context.filePath,
+                      line,
+                      snippet: extractSnippet(context.fileContent, line),
+                      suggestion: 'Use WHEN_UNLOCKED_THIS_DEVICE_ONLY for sensitive data. AFTER_FIRST_UNLOCK keeps data accessible even when the device is locked.',
+                    });
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+    });
+
+    return findings;
+  },
+};
+
 export const storageRules: RuleGroup = {
   category: RuleCategory.STORAGE,
   rules: [
-    asyncStorageSensitiveKeyRule, 
+    asyncStorageSensitiveKeyRule,
     hardcodedSecretsRule,
     asyncStoragePiiDataRule,
     reduxPersistNoEncryptionRule,
     clipboardSensitiveDataRule,
     insecureFileStorageRule,
     mmkvNoEncryptionRule,
+    unencryptedRealmDatabaseRule,
+    unencryptedSqliteDatabaseRule,
+    expoSecureStoreWeakOptionsRule,
   ],
 };

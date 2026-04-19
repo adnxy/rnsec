@@ -745,6 +745,325 @@ const thirdPartySdkRiskRule: Rule = {
   },
 };
 
+const expoUpdatesNoCodeSigningRule: Rule = {
+  id: 'EXPO_UPDATES_NO_CODE_SIGNING',
+  description: 'Expo OTA updates configured without code signing verification',
+  severity: Severity.HIGH,
+  fileTypes: ['.json'],
+  apply: async (context: RuleContext): Promise<Finding[]> => {
+    const findings: Finding[] = [];
+
+    if (!context.config || !context.filePath.includes('app.json')) {
+      return findings;
+    }
+
+    const expo = context.config.expo;
+    if (!expo) {
+      return findings;
+    }
+
+    const hasUpdates = expo.updates || expo.runtimeVersion;
+    const hasExpoUpdatesPlugin = expo.plugins?.some((p: any) =>
+      (typeof p === 'string' && p === 'expo-updates') ||
+      (Array.isArray(p) && p[0] === 'expo-updates')
+    );
+
+    if (hasUpdates || hasExpoUpdatesPlugin) {
+      const updatesConfig = expo.updates || {};
+      const hasCodeSigning = updatesConfig.codeSigningCertificate ||
+                             updatesConfig.codeSigningMetadata;
+
+      if (!hasCodeSigning) {
+        findings.push({
+          ruleId: 'EXPO_UPDATES_NO_CODE_SIGNING',
+          description: 'Expo OTA updates enabled without code signing - updates can be tampered with',
+          severity: Severity.HIGH,
+          filePath: context.filePath,
+          suggestion: 'Enable code signing for Expo updates to prevent tampered OTA updates. Configure codeSigningCertificate in updates config.',
+        });
+      }
+    }
+
+    return findings;
+  },
+};
+
+const insecureLinkingOpenRule: Rule = {
+  id: 'INSECURE_LINKING_OPEN',
+  description: 'Linking.openURL called with unvalidated user-controlled input',
+  severity: Severity.HIGH,
+  fileTypes: ['.js', '.jsx', '.ts', '.tsx'],
+  apply: async (context: RuleContext): Promise<Finding[]> => {
+    const findings: Finding[] = [];
+
+    if (!context.ast) {
+      return findings;
+    }
+
+    traverse(context.ast, {
+      CallExpression(path: any) {
+        const { node } = path;
+
+        if (
+          node.callee.type === 'MemberExpression' &&
+          node.callee.object.type === 'Identifier' &&
+          node.callee.object.name === 'Linking' &&
+          node.callee.property.type === 'Identifier' &&
+          node.callee.property.name === 'openURL'
+        ) {
+          const arg = node.arguments[0];
+
+          // Only flag dynamic/variable URLs, not string literals
+          if (arg && arg.type !== 'StringLiteral') {
+            const surroundingCode = context.fileContent.substring(
+              Math.max(0, (node.start || 0) - 300),
+              Math.min(context.fileContent.length, (node.end || 0) + 100)
+            );
+
+            const hasValidation = /validate|sanitize|whitelist|allowedSchemes|allowedDomains|canOpenURL|startsWith\s*\(\s*['"]https/i.test(surroundingCode);
+
+            if (!hasValidation) {
+              const line = getLineNumber(context.fileContent, node.start || 0);
+
+              findings.push({
+                ruleId: 'INSECURE_LINKING_OPEN',
+                description: 'Linking.openURL with unvalidated URL - may open malicious schemes (tel:, sms:, custom://)',
+                severity: Severity.HIGH,
+                filePath: context.filePath,
+                line,
+                snippet: extractSnippet(context.fileContent, line),
+                suggestion: 'Validate URL scheme against an allowlist before calling Linking.openURL. Use Linking.canOpenURL() first and restrict to https:// URLs.',
+              });
+            }
+          }
+        }
+      },
+    });
+
+    return findings;
+  },
+};
+
+const sensitiveNavigationParamsRule: Rule = {
+  id: 'SENSITIVE_NAVIGATION_PARAMS',
+  description: 'Sensitive data passed through React Navigation params',
+  severity: Severity.MEDIUM,
+  fileTypes: ['.js', '.jsx', '.ts', '.tsx'],
+  apply: async (context: RuleContext): Promise<Finding[]> => {
+    const findings: Finding[] = [];
+
+    if (!context.ast) {
+      return findings;
+    }
+
+    traverse(context.ast, {
+      CallExpression(path: any) {
+        const { node } = path;
+
+        // Match navigation.navigate('Screen', { ... }) or navigation.push('Screen', { ... })
+        if (
+          node.callee.type === 'MemberExpression' &&
+          node.callee.property.type === 'Identifier' &&
+          (node.callee.property.name === 'navigate' || node.callee.property.name === 'push')
+        ) {
+          const paramsArg = node.arguments[1];
+
+          if (paramsArg && paramsArg.type === 'ObjectExpression') {
+            for (const prop of paramsArg.properties) {
+              if (prop.type !== 'ObjectProperty' || !prop.key) continue;
+
+              const keyName = prop.key.type === 'Identifier' ? prop.key.name :
+                             (prop.key.type === 'StringLiteral' ? prop.key.value : '');
+              const lowerKey = keyName.toLowerCase();
+
+              const sensitiveKeys = ['password', 'token', 'secret', 'apikey', 'api_key', 'accesstoken',
+                                     'access_token', 'refreshtoken', 'refresh_token', 'pin', 'cvv', 'ssn',
+                                     'creditcard', 'cardnumber'];
+
+              if (sensitiveKeys.some(k => lowerKey.includes(k))) {
+                const line = getLineNumber(context.fileContent, node.start || 0);
+
+                findings.push({
+                  ruleId: 'SENSITIVE_NAVIGATION_PARAMS',
+                  description: `Sensitive data "${keyName}" passed via navigation params - persisted in navigation state`,
+                  severity: Severity.MEDIUM,
+                  filePath: context.filePath,
+                  line,
+                  snippet: extractSnippet(context.fileContent, line),
+                  suggestion: 'Avoid passing sensitive data through navigation params as they are serialized and may persist in navigation state. Use secure storage or context/state management instead.',
+                });
+                break;
+              }
+            }
+          }
+        }
+      },
+    });
+
+    return findings;
+  },
+};
+
+const pushNotificationSensitiveDataRule: Rule = {
+  id: 'PUSH_NOTIFICATION_SENSITIVE_DATA',
+  description: 'Push notification handler processing sensitive data without protection',
+  severity: Severity.MEDIUM,
+  fileTypes: ['.js', '.jsx', '.ts', '.tsx'],
+  apply: async (context: RuleContext): Promise<Finding[]> => {
+    const findings: Finding[] = [];
+
+    if (!context.ast) {
+      return findings;
+    }
+
+    // Check if file imports push notification libraries
+    let hasPushImport = false;
+
+    traverse(context.ast, {
+      ImportDeclaration(path: any) {
+        const { node } = path;
+        if (node.source && node.source.value) {
+          const source = node.source.value.toLowerCase();
+          if (
+            source.includes('expo-notifications') ||
+            source.includes('react-native-push-notification') ||
+            source.includes('@react-native-firebase/messaging') ||
+            source.includes('react-native-firebase') && source.includes('messaging') ||
+            source.includes('@notifee')
+          ) {
+            hasPushImport = true;
+          }
+        }
+      },
+    });
+
+    if (!hasPushImport) {
+      return findings;
+    }
+
+    traverse(context.ast, {
+      CallExpression(path: any) {
+        const { node } = path;
+
+        // Check for notification listeners that log or store sensitive data
+        const isNotificationListener =
+          (node.callee.type === 'MemberExpression' &&
+           node.callee.property.type === 'Identifier' &&
+           (node.callee.property.name === 'addNotificationReceivedListener' ||
+            node.callee.property.name === 'addNotificationResponseReceivedListener' ||
+            node.callee.property.name === 'onMessage' ||
+            node.callee.property.name === 'onNotification'));
+
+        if (isNotificationListener && node.arguments.length > 0) {
+          const callback = node.arguments[0];
+          if (callback) {
+            const callbackCode = context.fileContent.substring(
+              callback.start || 0,
+              Math.min(context.fileContent.length, (callback.end || 0) + 200)
+            ).toLowerCase();
+
+            const logsSensitiveData = /console\.(log|info|debug|warn)/.test(callbackCode) &&
+              /notification\.request\.content\.data|notification\.data|remoteMessage\.data/i.test(callbackCode);
+
+            const storesInsecurely = /asyncstorage/i.test(callbackCode) &&
+              (callbackCode.includes('token') || callbackCode.includes('password') || callbackCode.includes('secret'));
+
+            if (logsSensitiveData || storesInsecurely) {
+              const line = getLineNumber(context.fileContent, node.start || 0);
+
+              findings.push({
+                ruleId: 'PUSH_NOTIFICATION_SENSITIVE_DATA',
+                description: 'Push notification data logged or stored insecurely - notifications may contain sensitive payloads',
+                severity: Severity.MEDIUM,
+                filePath: context.filePath,
+                line,
+                snippet: extractSnippet(context.fileContent, line),
+                suggestion: 'Avoid sending sensitive data in push notification payloads. If required, encrypt payloads and store securely. Never log notification data in production.',
+              });
+            }
+          }
+        }
+      },
+    });
+
+    return findings;
+  },
+};
+
+const expoAuthSessionNoPkceRule: Rule = {
+  id: 'EXPO_AUTH_SESSION_NO_PKCE',
+  description: 'Expo AuthSession used without PKCE (Proof Key for Code Exchange)',
+  severity: Severity.HIGH,
+  fileTypes: ['.js', '.jsx', '.ts', '.tsx'],
+  apply: async (context: RuleContext): Promise<Finding[]> => {
+    const findings: Finding[] = [];
+
+    if (!context.ast) {
+      return findings;
+    }
+
+    let hasAuthSessionImport = false;
+
+    traverse(context.ast, {
+      ImportDeclaration(path: any) {
+        const { node } = path;
+        if (node.source && node.source.value) {
+          if (node.source.value === 'expo-auth-session' || node.source.value === 'expo-auth-session/providers/google') {
+            hasAuthSessionImport = true;
+          }
+        }
+      },
+    });
+
+    if (!hasAuthSessionImport) {
+      return findings;
+    }
+
+    traverse(context.ast, {
+      CallExpression(path: any) {
+        const { node } = path;
+
+        // Check for useAuthRequest or AuthSession.startAsync without PKCE
+        if (
+          node.callee.type === 'Identifier' &&
+          (node.callee.name === 'useAuthRequest' || node.callee.name === 'startAsync')
+        ) {
+          const configArg = node.arguments[0];
+
+          if (configArg && configArg.type === 'ObjectExpression') {
+            const hasUsePKCE = configArg.properties.some((prop: any) =>
+              prop.key && (prop.key.name === 'usePKCE' || prop.key.value === 'usePKCE')
+            );
+
+            // Check if usePKCE is explicitly set to false
+            const pkceDisabled = configArg.properties.some((prop: any) =>
+              prop.key &&
+              (prop.key.name === 'usePKCE' || prop.key.value === 'usePKCE') &&
+              prop.value && prop.value.type === 'BooleanLiteral' && prop.value.value === false
+            );
+
+            if (pkceDisabled) {
+              const line = getLineNumber(context.fileContent, node.start || 0);
+
+              findings.push({
+                ruleId: 'EXPO_AUTH_SESSION_NO_PKCE',
+                description: 'AuthSession with PKCE explicitly disabled - vulnerable to authorization code interception',
+                severity: Severity.HIGH,
+                filePath: context.filePath,
+                line,
+                snippet: extractSnippet(context.fileContent, line),
+                suggestion: 'Enable PKCE (usePKCE: true) for OAuth flows. PKCE prevents authorization code interception attacks on mobile apps.',
+              });
+            }
+          }
+        }
+      },
+    });
+
+    return findings;
+  },
+};
+
 export const reactNativeRules: RuleGroup = {
   category: RuleCategory.NETWORK,
   rules: [
@@ -759,5 +1078,10 @@ export const reactNativeRules: RuleGroup = {
     missingRuntimeIntegrityChecksRule,
     insecureDeserializationRule,
     thirdPartySdkRiskRule,
+    expoUpdatesNoCodeSigningRule,
+    insecureLinkingOpenRule,
+    sensitiveNavigationParamsRule,
+    pushNotificationSensitiveDataRule,
+    expoAuthSessionNoPkceRule,
   ],
 };

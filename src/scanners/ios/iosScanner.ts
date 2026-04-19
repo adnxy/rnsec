@@ -418,6 +418,96 @@ const insecureKeychainUsageRule: Rule = {
   },
 };
 
+const iosInsecurePasteboardUsageRule: Rule = {
+  id: 'IOS_INSECURE_PASTEBOARD_USAGE',
+  description: 'Sensitive data written to iOS pasteboard (shared across apps)',
+  severity: Severity.MEDIUM,
+  fileTypes: ['.js', '.jsx', '.ts', '.tsx', '.m', '.swift'],
+  apply: async (context: RuleContext): Promise<Finding[]> => {
+    const findings: Finding[] = [];
+
+    const content = context.fileContent;
+
+    // Check for UIPasteboard with sensitive data in native code
+    if (content.includes('UIPasteboard') || content.includes('pasteboard')) {
+      const surroundingLower = content.toLowerCase();
+      const sensitivePatterns = ['password', 'token', 'secret', 'apikey', 'credential', 'ssn', 'creditcard', 'cardnumber'];
+      const hasSensitiveContext = sensitivePatterns.some(p => surroundingLower.includes(p));
+
+      if (hasSensitiveContext) {
+        const lines = content.split('\n');
+        for (let i = 0; i < lines.length; i++) {
+          if (lines[i].includes('UIPasteboard') || lines[i].toLowerCase().includes('pasteboard')) {
+            findings.push({
+              ruleId: 'IOS_INSECURE_PASTEBOARD_USAGE',
+              description: 'Sensitive data written to pasteboard - accessible by all apps on device',
+              severity: Severity.MEDIUM,
+              filePath: context.filePath,
+              line: i + 1,
+              snippet: lines[i].trim(),
+              suggestion: 'Set UIPasteboard.general.setItems with expiration date. On iOS 14+ other apps cannot read pasteboard without user notification, but data persists across app launches.',
+            });
+            break;
+          }
+        }
+      }
+    }
+
+    return findings;
+  },
+};
+
+const iosMissingAppSnapshotProtectionRule: Rule = {
+  id: 'IOS_MISSING_APP_SNAPSHOT_PROTECTION',
+  description: 'Sensitive app without app snapshot protection on backgrounding',
+  severity: Severity.LOW,
+  fileTypes: ['.js', '.jsx', '.ts', '.tsx'],
+  apply: async (context: RuleContext): Promise<Finding[]> => {
+    const findings: Finding[] = [];
+
+    // Only check entry-point/App files
+    if (!context.filePath.match(/App\.(tsx|ts|jsx|js)$/) && !context.filePath.includes('index.')) {
+      return findings;
+    }
+
+    const content = context.fileContent.toLowerCase();
+
+    // Check if this is a sensitive app
+    const sensitiveIndicators = [
+      'payment', 'banking', 'financial', 'fintech', 'healthcare',
+      'medical', 'crypto', 'wallet', 'insurance'
+    ];
+
+    const isSensitiveApp = sensitiveIndicators.some(indicator => content.includes(indicator));
+
+    if (!isSensitiveApp) {
+      return findings;
+    }
+
+    // Check for snapshot/background protection
+    const hasSnapshotProtection =
+      content.includes('appstate') && (content.includes('blur') || content.includes('overlay') || content.includes('splash')) ||
+      content.includes('applicationdidbecomeactive') ||
+      content.includes('applicationwillresignactive') ||
+      content.includes('react-native-privacy-snapshot') ||
+      content.includes('react-native-screen-protection') ||
+      content.includes('screencapture') && content.includes('prevent');
+
+    if (!hasSnapshotProtection) {
+      findings.push({
+        ruleId: 'IOS_MISSING_APP_SNAPSHOT_PROTECTION',
+        description: 'Sensitive app without app snapshot protection - iOS takes screenshots when backgrounding',
+        severity: Severity.LOW,
+        filePath: context.filePath,
+        line: 1,
+        suggestion: 'Add a blur overlay or splash screen when app enters background state to prevent iOS from capturing sensitive screen content in the app switcher.',
+      });
+    }
+
+    return findings;
+  },
+};
+
 export const iosRules: RuleGroup = {
   category: RuleCategory.MANIFEST,
   rules: [
@@ -429,5 +519,7 @@ export const iosRules: RuleGroup = {
     iosDataProtectionMissingRule,
     iosAtsExceptionTooPermissiveRule,
     insecureKeychainUsageRule,
+    iosInsecurePasteboardUsageRule,
+    iosMissingAppSnapshotProtectionRule,
   ],
 };

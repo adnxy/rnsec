@@ -438,14 +438,84 @@ const improperBiometricFallbackRule: Rule = {
   },
 };
 
+const missingSessionTimeoutRule: Rule = {
+  id: 'MISSING_SESSION_TIMEOUT',
+  description: 'Authentication session without timeout or inactivity expiry',
+  severity: Severity.MEDIUM,
+  fileTypes: ['.js', '.jsx', '.ts', '.tsx'],
+  apply: async (context: RuleContext): Promise<Finding[]> => {
+    const findings: Finding[] = [];
+
+    if (!context.ast) {
+      return findings;
+    }
+
+    // Only check auth-related files
+    const filePath = context.filePath.toLowerCase();
+    const isAuthFile =
+      filePath.includes('auth') ||
+      filePath.includes('session') ||
+      filePath.includes('login');
+
+    if (!isAuthFile) {
+      return findings;
+    }
+
+    const content = context.fileContent.toLowerCase();
+
+    // Check if file handles authentication/sessions
+    const hasAuth =
+      content.includes('login') ||
+      content.includes('authenticate') ||
+      content.includes('signin') ||
+      content.includes('sign_in');
+
+    const hasTokenStorage =
+      content.includes('setitem') && (content.includes('token') || content.includes('session')) ||
+      content.includes('securestore') && content.includes('setitem');
+
+    if (!hasAuth && !hasTokenStorage) {
+      return findings;
+    }
+
+    // Check for session timeout/expiry mechanisms
+    const hasTimeout =
+      content.includes('timeout') ||
+      content.includes('expir') ||
+      content.includes('ttl') ||
+      content.includes('maxage') ||
+      content.includes('max_age') ||
+      content.includes('inactivity') ||
+      content.includes('sessionduration') ||
+      content.includes('session_duration') ||
+      content.includes('autologout') ||
+      content.includes('auto_logout') ||
+      content.includes('idle');
+
+    if (!hasTimeout) {
+      findings.push({
+        ruleId: 'MISSING_SESSION_TIMEOUT',
+        description: 'Authentication session without timeout or inactivity expiry',
+        severity: Severity.MEDIUM,
+        filePath: context.filePath,
+        line: 1,
+        suggestion: 'Implement session timeout for authentication. Auto-logout users after inactivity period. Set token expiration and validate on each request.',
+      });
+    }
+
+    return findings;
+  },
+};
+
 export const authenticationRules: RuleGroup = {
   category: RuleCategory.STORAGE,
   rules: [
-    insecureRandomRule, 
-    jwtNoExpiryCheckRule, 
+    insecureRandomRule,
+    jwtNoExpiryCheckRule,
     textInputNoSecureRule,
     oauthTokenInUrlRule,
     certPinningDisabledRule,
     improperBiometricFallbackRule,
+    missingSessionTimeoutRule,
   ],
 };

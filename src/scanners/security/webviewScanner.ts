@@ -540,15 +540,25 @@ const missingSecurityHeadersRule: Rule = {
                   attr.value?.start || 0,
                   attr.value?.end || 0
                 );
-                
+
+                // When source is a variable reference (e.g. source={source}),
+                // search the file for how that variable is assigned to determine source type
+                const isVariableRef =
+                  attr.value?.type === 'JSXExpressionContainer' &&
+                  attr.value?.expression?.type === 'Identifier';
+
+                const codeToCheck = isVariableRef
+                  ? context.fileContent
+                  : sourceCode;
+
                 // Check if headers are set
-                if (/headers\s*:/i.test(sourceCode)) {
+                if (/headers\s*:/i.test(codeToCheck)) {
                   injectsHeaders = true;
                 }
-                
-                // Check if loading HTML directly
-                if (/html\s*:/i.test(sourceCode)) {
-                  sourceHtml = sourceCode;
+
+                // Check if loading HTML directly (including ES6 shorthand { html })
+                if (/html\s*:/i.test(codeToCheck) || (isVariableRef && /[\{,]\s*html\s*[\},]/i.test(codeToCheck))) {
+                  sourceHtml = codeToCheck;
                 }
               }
             }

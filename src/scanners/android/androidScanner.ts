@@ -1,6 +1,9 @@
+import _traverse from '@babel/traverse';
+const traverse = (_traverse as any).default || _traverse;
 import { Severity, type Finding } from '../../types/findings.js';
 import { RuleCategory } from '../../types/ruleTypes.js';
 import type { Rule, RuleContext, RuleGroup } from '../../types/ruleTypes.js';
+import { getLineNumber, extractSnippet } from '../../utils/stringUtils.js';
 
 const androidDebuggableRule: Rule = {
   id: 'ANDROID_DEBUGGABLE_ENABLED',
@@ -365,6 +368,145 @@ const excessivePermissionsRule: Rule = {
   },
 };
 
+const androidTaskAffinityVulnerabilityRule: Rule = {
+  id: 'ANDROID_TASK_AFFINITY_VULNERABILITY',
+  description: 'Android activity with custom task affinity - vulnerable to task hijacking',
+  severity: Severity.MEDIUM,
+  fileTypes: ['.xml'],
+  apply: async (context: RuleContext): Promise<Finding[]> => {
+    const findings: Finding[] = [];
+
+    if (!context.xmlContent || !context.filePath.includes('AndroidManifest')) {
+      return findings;
+    }
+
+    // Check for activities with custom taskAffinity
+    const activityPattern = /<activity[^>]*android:taskAffinity="([^"]*)"[^>]*>/gi;
+    const matches = context.xmlContent.matchAll(activityPattern);
+
+    for (const match of matches) {
+      const affinity = match[1];
+
+      // Empty taskAffinity is actually secure (prevents hijacking)
+      if (affinity === '') continue;
+
+      findings.push({
+        ruleId: 'ANDROID_TASK_AFFINITY_VULNERABILITY',
+        description: `Activity with custom taskAffinity="${affinity}" - vulnerable to StrandHogg task hijacking`,
+        severity: Severity.MEDIUM,
+        filePath: context.filePath,
+        suggestion: 'Set android:taskAffinity="" (empty string) on activities to prevent task hijacking attacks (StrandHogg). This prevents malicious apps from intercepting your activities.',
+      });
+    }
+
+    return findings;
+  },
+};
+
+const androidWebviewDebugEnabledRule: Rule = {
+  id: 'ANDROID_WEBVIEW_DEBUG_ENABLED',
+  description: 'Android WebView debugging enabled - allows remote inspection',
+  severity: Severity.HIGH,
+  fileTypes: ['.js', '.jsx', '.ts', '.tsx', '.java', '.kt'],
+  apply: async (context: RuleContext): Promise<Finding[]> => {
+    const findings: Finding[] = [];
+
+    const content = context.fileContent;
+
+    if (content.includes('setWebContentsDebuggingEnabled') && content.includes('true')) {
+      const lines = content.split('\n');
+      for (let i = 0; i < lines.length; i++) {
+        if (lines[i].includes('setWebContentsDebuggingEnabled') && lines[i].includes('true')) {
+          // Check for __DEV__ guard
+          const surroundingCode = lines.slice(Math.max(0, i - 3), Math.min(lines.length, i + 3)).join('\n');
+          const hasDevCheck = /__DEV__|BuildConfig\.DEBUG|isDebuggable/i.test(surroundingCode);
+
+          if (!hasDevCheck) {
+            findings.push({
+              ruleId: 'ANDROID_WEBVIEW_DEBUG_ENABLED',
+              description: 'WebView debugging enabled without build type check - allows remote Chrome DevTools inspection',
+              severity: Severity.HIGH,
+              filePath: context.filePath,
+              line: i + 1,
+              snippet: lines[i].trim(),
+              suggestion: 'Guard WebView debugging with BuildConfig.DEBUG or __DEV__ check. WebView debugging allows attackers to inspect and modify web content.',
+            });
+          }
+        }
+      }
+    }
+
+    // Also check for react-native-webview debug prop
+    if (context.ast) {
+      traverse(context.ast, {
+        JSXAttribute(path: any) {
+          const { node } = path;
+          if (
+            node.name.type === 'JSXIdentifier' &&
+            node.name.name === 'webContentsDebuggingEnabled' &&
+            node.value?.type === 'JSXExpressionContainer' &&
+            node.value.expression.type === 'BooleanLiteral' &&
+            node.value.expression.value === true
+          ) {
+            const surroundingCode = context.fileContent.substring(
+              Math.max(0, (node.start || 0) - 200),
+              Math.min(context.fileContent.length, (node.end || 0) + 100)
+            );
+            const hasDevCheck = /__DEV__|process\.env\.NODE_ENV/.test(surroundingCode);
+
+            if (!hasDevCheck) {
+              const line = getLineNumber(context.fileContent, node.start || 0);
+
+              findings.push({
+                ruleId: 'ANDROID_WEBVIEW_DEBUG_ENABLED',
+                description: 'WebView webContentsDebuggingEnabled={true} without __DEV__ guard',
+                severity: Severity.HIGH,
+                filePath: context.filePath,
+                line,
+                snippet: extractSnippet(context.fileContent, line),
+                suggestion: 'Only enable WebView debugging in development: webContentsDebuggingEnabled={__DEV__}',
+              });
+            }
+          }
+        },
+      });
+    }
+
+    return findings;
+  },
+};
+
+const androidMissingNetworkSecurityConfigRule: Rule = {
+  id: 'ANDROID_MISSING_NETWORK_SECURITY_CONFIG',
+  description: 'Android manifest missing network security config reference',
+  severity: Severity.MEDIUM,
+  fileTypes: ['.xml'],
+  apply: async (context: RuleContext): Promise<Finding[]> => {
+    const findings: Finding[] = [];
+
+    if (!context.xmlContent || !context.filePath.includes('AndroidManifest')) {
+      return findings;
+    }
+
+    const hasNetworkSecurityConfig = context.xmlContent.includes('android:networkSecurityConfig');
+
+    // Only flag if the app uses internet permission (is a networked app)
+    const hasInternetPermission = context.xmlContent.includes('android.permission.INTERNET');
+
+    if (hasInternetPermission && !hasNetworkSecurityConfig) {
+      findings.push({
+        ruleId: 'ANDROID_MISSING_NETWORK_SECURITY_CONFIG',
+        description: 'Network-enabled app without network_security_config.xml - missing certificate pinning and cleartext traffic control',
+        severity: Severity.MEDIUM,
+        filePath: context.filePath,
+        suggestion: 'Add android:networkSecurityConfig="@xml/network_security_config" to <application> tag. Configure certificate pinning and restrict cleartext traffic.',
+      });
+    }
+
+    return findings;
+  },
+};
+
 export const androidRules: RuleGroup = {
   category: RuleCategory.MANIFEST,
   rules: [
@@ -376,5 +518,8 @@ export const androidRules: RuleGroup = {
     androidContentProviderNoPermissionRule,
     insecureKeystoreUsageRule,
     excessivePermissionsRule,
+    androidTaskAffinityVulnerabilityRule,
+    androidWebviewDebugEnabledRule,
+    androidMissingNetworkSecurityConfigRule,
   ],
 };

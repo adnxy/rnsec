@@ -324,12 +324,181 @@ const weakTlsConfigurationRule: Rule = {
   },
 };
 
+const insecureWebSocketRule: Rule = {
+  id: 'INSECURE_WEBSOCKET',
+  description: 'WebSocket connection using unencrypted ws:// protocol',
+  severity: Severity.MEDIUM,
+  fileTypes: ['.js', '.jsx', '.ts', '.tsx'],
+  apply: async (context: RuleContext): Promise<Finding[]> => {
+    const findings: Finding[] = [];
+
+    if (!context.ast) {
+      return findings;
+    }
+
+    traverse(context.ast, {
+      NewExpression(path: any) {
+        const { node } = path;
+
+        if (
+          node.callee.type === 'Identifier' &&
+          node.callee.name === 'WebSocket'
+        ) {
+          const urlArg = node.arguments[0];
+
+          if (urlArg && urlArg.type === 'StringLiteral' && urlArg.value.startsWith('ws://')) {
+            // Skip localhost/dev URLs
+            const url = urlArg.value.toLowerCase();
+            if (url.includes('localhost') || url.includes('127.0.0.1') || url.includes('10.0.') || url.includes('192.168.')) {
+              const surroundingCode = context.fileContent.substring(
+                Math.max(0, (node.start || 0) - 200),
+                Math.min(context.fileContent.length, (node.end || 0) + 100)
+              );
+              const hasDevCheck = /__DEV__|process\.env\.NODE_ENV/.test(surroundingCode);
+              if (hasDevCheck) return;
+            }
+
+            const line = getLineNumber(context.fileContent, node.start || 0);
+
+            findings.push({
+              ruleId: 'INSECURE_WEBSOCKET',
+              description: `Unencrypted WebSocket connection: "${urlArg.value}"`,
+              severity: Severity.MEDIUM,
+              filePath: context.filePath,
+              line,
+              snippet: extractSnippet(context.fileContent, line),
+              suggestion: 'Use wss:// (WebSocket Secure) instead of ws:// for encrypted WebSocket connections.',
+            });
+          }
+        }
+      },
+
+      StringLiteral(path: any) {
+        const { node } = path;
+
+        // Also catch ws:// URLs assigned to variables (e.g., const WS_URL = 'ws://...')
+        if (node.value.startsWith('ws://') && !node.value.includes('localhost') && !node.value.includes('127.0.0.1')) {
+          const parent = path.parent;
+          if (
+            parent.type === 'VariableDeclarator' ||
+            (parent.type === 'ObjectProperty' &&
+             parent.key &&
+             (parent.key.name || parent.key.value || '').toLowerCase().includes('url'))
+          ) {
+            const surroundingCode = context.fileContent.substring(
+              Math.max(0, (node.start || 0) - 200),
+              Math.min(context.fileContent.length, (node.end || 0) + 100)
+            );
+            const hasDevCheck = /__DEV__|process\.env\.NODE_ENV/.test(surroundingCode);
+            if (hasDevCheck) return;
+
+            const line = getLineNumber(context.fileContent, node.start || 0);
+
+            findings.push({
+              ruleId: 'INSECURE_WEBSOCKET',
+              description: `Unencrypted WebSocket URL configured: "${node.value}"`,
+              severity: Severity.MEDIUM,
+              filePath: context.filePath,
+              line,
+              snippet: extractSnippet(context.fileContent, line),
+              suggestion: 'Use wss:// instead of ws:// for encrypted WebSocket connections.',
+            });
+          }
+        }
+      },
+    });
+
+    return findings;
+  },
+};
+
+const hardcodedIpAddressRule: Rule = {
+  id: 'HARDCODED_IP_ADDRESS',
+  description: 'Hardcoded IP address in production code',
+  severity: Severity.MEDIUM,
+  fileTypes: ['.js', '.jsx', '.ts', '.tsx'],
+  apply: async (context: RuleContext): Promise<Finding[]> => {
+    const findings: Finding[] = [];
+
+    if (!context.ast) {
+      return findings;
+    }
+
+    const filePath = context.filePath.toLowerCase();
+    if (
+      filePath.includes('.test.') ||
+      filePath.includes('.spec.') ||
+      filePath.includes('/__tests__/') ||
+      filePath.includes('node_modules') ||
+      filePath.includes('metro.config') ||
+      filePath.includes('.config.')
+    ) {
+      return findings;
+    }
+
+    // Match IP addresses in URLs or standalone
+    const ipPattern = /\b(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\b/;
+
+    traverse(context.ast, {
+      StringLiteral(path: any) {
+        const { node } = path;
+        const value = node.value;
+
+        const match = value.match(ipPattern);
+        if (!match) return;
+
+        const ip = match[1];
+
+        // Skip local/private IPs only if behind __DEV__ check
+        const isPrivate = ip.startsWith('127.') || ip.startsWith('10.') ||
+                          ip.startsWith('192.168.') || ip.startsWith('172.') ||
+                          ip === '0.0.0.0' || ip === '255.255.255.255';
+
+        if (isPrivate) {
+          const surroundingCode = context.fileContent.substring(
+            Math.max(0, (node.start || 0) - 200),
+            Math.min(context.fileContent.length, (node.end || 0) + 100)
+          );
+          const hasDevCheck = /__DEV__|process\.env\.NODE_ENV/.test(surroundingCode);
+          if (hasDevCheck) return;
+        }
+
+        // Only flag IPs in URL-like context or API config
+        const isUrlContext = value.includes('://') || value.includes('http');
+        const parent = path.parent;
+        const isApiConfig = parent && parent.type === 'ObjectProperty' && parent.key &&
+          /url|host|endpoint|server|api|base/i.test(parent.key.name || parent.key.value || '');
+
+        if (isUrlContext || isApiConfig) {
+          const line = getLineNumber(context.fileContent, node.start || 0);
+
+          findings.push({
+            ruleId: 'HARDCODED_IP_ADDRESS',
+            description: `Hardcoded IP address in ${isPrivate ? 'private' : 'public'} network URL: ${ip}`,
+            severity: isPrivate ? Severity.LOW : Severity.MEDIUM,
+            filePath: context.filePath,
+            line,
+            snippet: extractSnippet(context.fileContent, line),
+            suggestion: isPrivate
+              ? 'Wrap development IP addresses in __DEV__ check to prevent them from being included in production builds.'
+              : 'Use domain names instead of hardcoded IP addresses. Configure server URLs through environment variables.',
+          });
+        }
+      },
+    });
+
+    return findings;
+  },
+};
+
 export const networkRules: RuleGroup = {
   category: RuleCategory.NETWORK,
   rules: [
-    insecureHttpUrlRule, 
+    insecureHttpUrlRule,
     insecureWebViewRule,
     noRequestTimeoutRule,
     weakTlsConfigurationRule,
+    insecureWebSocketRule,
+    hardcodedIpAddressRule,
   ],
 };
