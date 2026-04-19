@@ -1,6 +1,6 @@
 {
   "name": "rnsec",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "Zero-config security scanner for React Native & Expo apps. Find vulnerabilities with 68 security rules covering Android, iOS, and React Native specific issues.",
   "main": "dist/index.js",
   "bin": {
@@ -10,7 +10,7 @@
     "build": "tsc && cp src/core/template.html dist/core/template.html",
     "dev": "ts-node src/index.ts",
     "prepublishOnly": "npm run build",
-    "test": "echo \"Tests coming soon\" && exit 0",
+    "test": "npx tsx tests/rules.test.ts",
     "lint": "tsc --noEmit",
     "clean": "rm -rf dist"
   },
