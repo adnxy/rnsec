@@ -18,11 +18,17 @@ export interface Finding {
   category?: string; // e.g., "npm", "config", "code"
 }
 
+export interface IgnoredFinding {
+  ruleId: string;
+  path: string;
+  line?: number;
+}
+
 export interface ScanResult {
   findings: Finding[];
   scannedFiles: number;
   duration: number;
   timestamp: Date;
   ignoredRules?: string[];
+  ignoredFindings?: IgnoredFinding[];
 }
-

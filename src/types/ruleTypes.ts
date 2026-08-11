@@ -1,5 +1,5 @@
 import type { Node } from '@babel/types';
-import type { Finding, Severity } from './findings.js';
+import type { Finding, IgnoredFinding, Severity } from './findings.js';
 
 export interface RuleContext {
   filePath: string;
@@ -33,11 +33,12 @@ export interface RuleGroup {
 
 export interface RnsecConfig {
   ignoredRules?: string[];
+  ignoredFindings?: IgnoredFinding[];
   npmVulnerabilityScanning?: {
     enabled?: boolean;
     dataSource?: 'npm-audit' | 'hardcoded';
     excludeDevDependencies?: boolean;
   };
-  exclude?: string[]
+  exclude?: string[];
   // Future: other config options
 }

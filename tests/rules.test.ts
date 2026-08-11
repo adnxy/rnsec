@@ -9,6 +9,7 @@
  */
 
 import { parseJSFile } from '../src/core/astParser.js';
+import { RuleEngine } from '../src/core/ruleEngine.js';
 import { reactNativeRules } from '../src/scanners/react-native/reactNativeScanner.js';
 import { storageRules } from '../src/scanners/security/storageScanner.js';
 import { networkRules } from '../src/scanners/security/networkScanner.js';
@@ -18,8 +19,13 @@ import { iosRules } from '../src/scanners/ios/iosScanner.js';
 import { cryptoRules } from '../src/scanners/security/cryptoScanner.js';
 import { authenticationRules } from '../src/scanners/security/authenticationScanner.js';
 import type { RuleContext } from '../src/types/ruleTypes.js';
-import type { Finding } from '../src/types/findings.js';
+import { Severity } from '../src/types/findings.js';
+import { RuleCategory } from '../src/types/ruleTypes.js';
+import type { Finding, IgnoredFinding } from '../src/types/findings.js';
 import type { Rule } from '../src/types/ruleTypes.js';
+import { mkdir, mkdtemp, rm, writeFile } from 'fs/promises';
+import { tmpdir } from 'os';
+import { join } from 'path';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -78,6 +84,18 @@ async function assertFindings(
   } else {
     failed++;
     const msg = `  ✗ ${testName} — expected ${expectCount}, got ${matched.length}`;
+    console.log(msg);
+    failures.push(msg);
+  }
+}
+
+function assertCondition(testName: string, condition: boolean, details: string) {
+  if (condition) {
+    passed++;
+    console.log(`  ✓ ${testName}`);
+  } else {
+    failed++;
+    const msg = `  ✗ ${testName} — ${details}`;
     console.log(msg);
     failures.push(msg);
   }
@@ -711,6 +729,96 @@ async function runTests() {
     ),
     'none',
   );
+
+  // ─── Finding-level ignores ──────────────────────────────────────────────
+  console.log('IGNORED_FINDINGS:');
+  const ignoreTestRoot = await mkdtemp(join(tmpdir(), 'rnsec-ignored-findings-'));
+  const ignoreTestFile = join(ignoreTestRoot, 'src', 'service.ts');
+  await mkdir(join(ignoreTestRoot, 'src'), { recursive: true });
+  await writeFile(ignoreTestFile, 'const value = true;');
+
+  const scopedRule: Rule = {
+    id: 'SCOPED_RULE',
+    description: 'Synthetic scoped rule',
+    severity: Severity.LOW,
+    fileTypes: ['.ts'],
+    apply: async context => [
+      {
+        ruleId: 'SCOPED_RULE',
+        description: 'Finding on line 10',
+        severity: Severity.LOW,
+        filePath: context.filePath,
+        line: 10,
+      },
+      {
+        ruleId: 'SCOPED_RULE',
+        description: 'Finding on line 20',
+        severity: Severity.LOW,
+        filePath: context.filePath,
+        line: 20,
+      },
+    ],
+  };
+  const otherRule: Rule = {
+    id: 'OTHER_RULE',
+    description: 'Synthetic unaffected rule',
+    severity: Severity.LOW,
+    fileTypes: ['.ts'],
+    apply: async context => [{
+      ruleId: 'OTHER_RULE',
+      description: 'Finding from another rule',
+      severity: Severity.LOW,
+      filePath: context.filePath,
+      line: 10,
+    }],
+  };
+
+  const scanWithIgnores = async (ignoredFindings: IgnoredFinding[]) => {
+    const engine = new RuleEngine();
+    engine.registerRuleGroup({
+      category: RuleCategory.CONFIG,
+      rules: [scopedRule, otherRule],
+    });
+    await engine.setIgnoredFindings(ignoredFindings, ignoreTestRoot);
+    return (await engine.runRulesOnFiles([ignoreTestFile])).findings;
+  };
+
+  try {
+    const pathScoped = await scanWithIgnores([{
+      ruleId: 'SCOPED_RULE',
+      path: 'src/**/*.ts',
+    }]);
+    assertCondition(
+      'ignores one rule for matching paths without hiding other rules',
+      pathScoped.length === 1 && pathScoped[0].ruleId === 'OTHER_RULE',
+      `expected only OTHER_RULE, got ${pathScoped.map(finding => finding.ruleId).join(', ')}`,
+    );
+
+    const lineScoped = await scanWithIgnores([{
+      ruleId: 'SCOPED_RULE',
+      path: 'src/service.ts',
+      line: 10,
+    }]);
+    assertCondition(
+      'ignores only the configured source line',
+      lineScoped.length === 2 &&
+        lineScoped.some(finding => finding.ruleId === 'SCOPED_RULE' && finding.line === 20) &&
+        lineScoped.some(finding => finding.ruleId === 'OTHER_RULE'),
+      `unexpected findings: ${lineScoped.map(finding => `${finding.ruleId}:${finding.line}`).join(', ')}`,
+    );
+
+    const nonMatchingPath = await scanWithIgnores([{
+      ruleId: 'SCOPED_RULE',
+      path: 'src/other.ts',
+    }]);
+    assertCondition(
+      'keeps findings when the path does not match',
+      nonMatchingPath.length === 3,
+      `expected 3 findings, got ${nonMatchingPath.length}`,
+    );
+  } finally {
+    await rm(ignoreTestRoot, { recursive: true, force: true });
+  }
 
   // ─── Summary ────────────────────────────────────────────────────────────
   console.log(`\n${'='.repeat(50)}`);

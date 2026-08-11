@@ -147,6 +147,13 @@ program
           console.log(chalk.yellow(`ℹ Excluding ${config.exclude.length} path(s): ${config.exclude.join(', ')}`));
         }
       }
+
+      if (config?.ignoredFindings) {
+        await engine.setIgnoredFindings(config.ignoredFindings, targetPath);
+        if (config.ignoredFindings.length > 0 && !options.silent) {
+          console.log(chalk.yellow(`ℹ Ignoring ${config.ignoredFindings.length} scoped finding(s)`));
+        }
+      }
       
       // Show npm scanning status
       if (config?.npmVulnerabilityScanning?.enabled === false && !options.silent) {
@@ -214,6 +221,7 @@ program
         duration,
         timestamp: new Date(),
         ignoredRules: engine.getIgnoredRules(),
+        ignoredFindings: engine.getIgnoredFindings(),
       };
 
       const htmlPath = options.html || (!options.json ? DEFAULT_REPORT_FILENAMES.HTML : null);
@@ -287,4 +295,3 @@ program
   });
 
 program.parse(process.argv);
-

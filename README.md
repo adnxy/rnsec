@@ -313,6 +313,40 @@ You can ignore specific rules by adding them to the `ignoredRules` array:
 
 To find the rule ID for a specific finding, check the `ruleId` field in the JSON output or HTML report.
 
+### Ignoring Findings by Rule and Path
+
+Use `ignoredFindings` to suppress a rule only for matching files while keeping
+other rules active in those files. Paths support the same glob syntax as
+`exclude`:
+
+```jsonc
+{
+  "ignoredFindings": [
+    {
+      "ruleId": "SENSITIVE_LOGGING",
+      "path": "src/services/**/*.ts"
+    }
+  ]
+}
+```
+
+Add `line` to suppress only one finding at a known source location:
+
+```jsonc
+{
+  "ignoredFindings": [
+    {
+      "ruleId": "API_KEY_EXPOSED",
+      "path": "src/services/DictionariesMapper.ts",
+      "line": 32
+    }
+  ]
+}
+```
+
+Line-scoped ignores match the line number reported by rnsec. If the source
+moves, update the configured line or prefer a path-scoped ignore.
+
 ### Excluding Files
 
 You can exclude specific files and directories by adding exclude patterns to the `exclude` array:

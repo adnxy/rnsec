@@ -1,4 +1,6 @@
-import type { Finding } from '../types/findings.js';
+import fg from 'fast-glob';
+import { resolve } from 'path';
+import type { Finding, IgnoredFinding } from '../types/findings.js';
 import type { Rule, RuleContext, RuleGroup } from '../types/ruleTypes.js';
 import { parseJSFile, parseJsonSafe } from './astParser.js';
 import { readFileContent } from '../utils/fileUtils.js';
@@ -13,6 +15,8 @@ export class RuleEngine {
   private ignoredRules: Set<string> = new Set();
   private skippedFiles: number = 0;
   private excludedPaths: string[] = [];
+  private ignoredFindings: IgnoredFinding[] = [];
+  private ignoredFindingPaths: Set<string>[] = [];
 
   /**
    * Register a group of security rules
@@ -52,6 +56,35 @@ export class RuleEngine {
    */
   getExcludedPaths(): string[] {
     return this.excludedPaths;
+  }
+
+  /**
+   * Set finding-level ignores scoped by rule, path and optional line
+   * @param ignoredFindings - Finding ignore definitions from configuration
+   * @param rootDir - Project root used to resolve path globs
+   */
+  async setIgnoredFindings(
+    ignoredFindings: IgnoredFinding[],
+    rootDir: string
+  ): Promise<void> {
+    const resolvedRoot = resolve(rootDir);
+    this.ignoredFindings = ignoredFindings;
+    this.ignoredFindingPaths = await Promise.all(
+      ignoredFindings.map(async ignoredFinding => {
+        const matchedPaths = await fg(ignoredFinding.path, {
+          cwd: resolvedRoot,
+          absolute: true,
+        });
+        return new Set(matchedPaths.map(filePath => resolve(filePath)));
+      })
+    );
+  }
+
+  /**
+   * Get configured finding-level ignores
+   */
+  getIgnoredFindings(): IgnoredFinding[] {
+    return this.ignoredFindings;
   }
 
   /**
@@ -152,7 +185,7 @@ export class RuleEngine {
       for (const rule of applicableRules) {
         try {
           const ruleFindings = await rule.apply(context);
-          findings.push(...ruleFindings);
+          findings.push(...this.filterIgnoredFindings(ruleFindings));
         } catch (error) {
           // Silently continue - rule errors shouldn't stop the scan
         }
@@ -173,6 +206,19 @@ export class RuleEngine {
 
       return [];
     }
+  }
+
+  /**
+   * Filter findings ignored for a matching rule, path and optional line
+   */
+  private filterIgnoredFindings(findings: Finding[]): Finding[] {
+    return findings.filter(finding =>
+      !this.ignoredFindings.some((ignoredFinding, index) =>
+        ignoredFinding.ruleId === finding.ruleId &&
+        this.ignoredFindingPaths[index]?.has(resolve(finding.filePath)) &&
+        (ignoredFinding.line === undefined || ignoredFinding.line === finding.line)
+      )
+    );
   }
 
   /**
