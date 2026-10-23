@@ -1,0 +1,14 @@
+{
+  "expo": {
+    "name": "demo",
+    "extra": {
+      "apiBase": "https://api.example-corp.com",
+      "eas": { "projectId": "00000000-0000-0000-0000-000000000000" },
+      "stripeSecretKey": "fake-secret-value-123",
+      "backend": {
+        "dbPassword": "fake-password-value",
+        "adminKey": "fake-admin-value-1"
+      }
+    }
+  }
+}

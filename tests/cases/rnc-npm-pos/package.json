@@ -1,0 +1,10 @@
+{
+  "name": "npm-pos",
+  "dependencies": {
+    "lodash": "4.17.15",
+    "node-fetch": "3.0.0",
+    "minimist": "^1.2.0",
+    "colors": "^1.4.0",
+    "request": "^2.88.2"
+  }
+}

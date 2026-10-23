@@ -1,0 +1,22 @@
+{
+  "expo": {
+    "name": "demo",
+    "android": {
+      "package": "com.example.demo",
+      "allowBackup": false
+    },
+    "ios": {
+      "infoPlist": {
+        "UIFileSharingEnabled": false,
+        "NSAppTransportSecurity": {
+          "NSAllowsArbitraryLoads": false,
+          "NSExceptionDomains": { "localhost": { "NSExceptionAllowsInsecureHTTPLoads": true } }
+        }
+      }
+    },
+    "plugins": [
+      "expo-router",
+      ["expo-build-properties", { "android": { "usesCleartextTraffic": false, "compileSdkVersion": 34 } }]
+    ]
+  }
+}

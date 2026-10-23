@@ -1,0 +1,9 @@
+{
+  "name": "sdk-pos",
+  "dependencies": {
+    "react-native": "0.74.0",
+    "react-native-adjust": "4.38.0",
+    "@segment/analytics-react-native": "2.19.0",
+    "@segment/sovran-react-native": "1.1.0"
+  }
+}

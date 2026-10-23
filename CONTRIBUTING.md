@@ -17,7 +17,7 @@ npm run build
 
 # Test it locally
 npm link
-rnsec scan examples/vulnerable-app
+rnsec scan --path examples/vulnerable-app
 ```
 
 ## How to Contribute
@@ -43,7 +43,7 @@ rnsec scan examples/vulnerable-app
 2. **Create a branch**: `git checkout -b feature/your-feature`
 3. **Make your changes** following the code structure
 4. **Build**: `npm run build`
-5. **Test**: Test with the example apps
+5. **Test**: Run `npm test` (it builds first). Add a fixture under `tests/cases/` for new or changed rules, and see [DEVELOPMENT.md](DEVELOPMENT.md) for the snapshot workflow
 6. **Commit**: Use clear commit messages
 7. **Push**: `git push origin feature/your-feature`
 8. **Open a PR** with a clear description
@@ -65,6 +65,8 @@ const yourRule: Rule = {
   },
 };
 ```
+
+Add a positive fixture (`tests/cases/cov-<rule>/`) and a near-miss (`tests/cases/cov-<rule>-neg/`) for every new rule, and keep the rule count in `README.md` and `package.json` in sync (`npm test` checks it).
 
 ## Code Style
 

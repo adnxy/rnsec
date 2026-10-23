@@ -1,0 +1,12 @@
+{
+  "name": "npm-neg",
+  "dependencies": {
+    "node-fetch": "2.7.0",
+    "lodash": "latest",
+    "axios": ">=0.21.1",
+    "faker": "5.5.3"
+  },
+  "devDependencies": {
+    "request": "^2.88.2"
+  }
+}

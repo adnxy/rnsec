@@ -1,0 +1,17 @@
+{
+  "name": "deps-app",
+  "version": "1.0.0",
+  "dependencies": {
+    "react-native": "0.74.0",
+    "lib-git": "git+https://github.com/acme/lib-git.git",
+    "lib-short": "acme/lib-short",
+    "lib-gh": "github:acme/lib-gh#main",
+    "lib-pinned": "github:acme/lib-pinned#0123456789abcdef0123456789abcdef01234567",
+    "lib-tar": "https://example.com/lib-tar-1.0.0.tgz",
+    "lib-latest": "latest",
+    "lib-star": "*"
+  },
+  "devDependencies": {
+    "dev-git": "git://github.com/acme/dev-git.git"
+  }
+}

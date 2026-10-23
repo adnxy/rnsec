@@ -1,0 +1,17 @@
+{
+  "cli": { "version": ">= 5.0.0" },
+  "build": {
+    "production": {
+      "env": {
+        "API_URL": "https://api.example-corp.com",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "fake-anon-value-123",
+        "CLIENT_SECRET": "$CLIENT_SECRET",
+        "SENTRY_AUTH_SECRET": "",
+        "PASSWORD_MIN_LENGTH": "12"
+      }
+    }
+  },
+  "submit": {
+    "production": { "android": { "serviceAccountKeyPath": "./secrets/play-service-account.json" } }
+  }
+}

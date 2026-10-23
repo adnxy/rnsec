@@ -1,0 +1,7 @@
+{
+  "name": "a",
+  "dependencies": {
+    "react-native": "0.74.0",
+    "expo-secure-store": "13.0.0"
+  }
+}

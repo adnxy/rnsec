@@ -1,0 +1,27 @@
+{
+  "expo": {
+    "name": "demo",
+    "ios": {
+      "config": {
+        "googleMapsApiKey": "fake-maps-key-123",
+        "googleMobileAdsAppId": "ca-app-pub-0000000000000000~0000000000",
+        "googleSignIn": { "apiKey": "fake-signin-key-1", "reservedClientId": "fake-reserved-1" },
+        "branch": { "apiKey": "key_live_fakebranch1" },
+        "usesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "config": {
+        "googleMaps": { "apiKey": "fake-maps-key-456" },
+        "branch": { "apiKey": "key_test_fakebranch2", "secret": "fake-branch-secret-1" },
+        "someSdk": { "apiKey": "fake-sdk-key-789" }
+      }
+    },
+    "plugins": [
+      "expo-router",
+      ["@sentry/react-native/expo", { "organization": "acme", "authToken": "fake-sentry-token-1", "url": "https://sentry.io/" }],
+      ["expo-build-properties", { "ios": { "deploymentTarget": "15.1" } }],
+      ["some-plugin", { "authToken": "${SENTRY_AUTH_TOKEN}", "clientSecret": "process.env.SECRET" }]
+    ]
+  }
+}

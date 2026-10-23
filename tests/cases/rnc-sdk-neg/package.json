@@ -1,0 +1,7 @@
+{
+  "name": "sdk-neg",
+  "dependencies": {
+    "react-native": "0.74.0",
+    "react-native-adjust-padding": "1.0.0"
+  }
+}

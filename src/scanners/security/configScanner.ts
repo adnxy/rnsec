@@ -10,7 +10,8 @@ const expoInsecurePermissionsRule: Rule = {
   apply: async (context: RuleContext): Promise<Finding[]> => {
     const findings: Finding[] = [];
     
-    if (!context.config || !context.filePath.includes('app.json')) {
+    const fileName = context.filePath.split(/[\\/]/).pop();
+    if (!context.config || (fileName !== 'app.json' && fileName !== 'app.config.json')) {
       return findings;
     }
 
@@ -21,16 +22,21 @@ const expoInsecurePermissionsRule: Rule = {
       'android.permission.RECORD_AUDIO',
     ];
 
-    if (context.config.expo?.android?.permissions) {
-      const permissions = context.config.expo.android.permissions;
+    const permissions = context.config.expo?.android?.permissions;
+    if (Array.isArray(permissions)) {
+      const lines = context.fileContent.split('\n');
       
       for (const permission of permissions) {
-        if (dangerousPermissions.includes(permission)) {
+        if (typeof permission === 'string' && dangerousPermissions.includes(permission)) {
+          const idx = lines.findIndex(l => l.includes(`"${permission}"`));
           findings.push({
             ruleId: 'EXPO_INSECURE_PERMISSIONS',
             description: `Dangerous permission detected: ${permission}`,
             severity: Severity.LOW,
+            // Apps often need these on purpose; the rule cannot see whether they are used
+            confidence: 'low',
             filePath: context.filePath,
+            line: idx === -1 ? undefined : idx + 1,
             suggestion: 'Only request necessary permissions and explain usage to users',
           });
         }
@@ -71,70 +77,10 @@ const expoUpdatesInsecureUrlRule: Rule = {
   },
 };
 
-const expoSensitiveConfigExposedRule: Rule = {
-  id: 'EXPO_SENSITIVE_CONFIG_EXPOSED',
-  description: 'Sensitive values exposed in Expo app.json configuration',
-  severity: Severity.HIGH,
-  fileTypes: ['.json'],
-  apply: async (context: RuleContext): Promise<Finding[]> => {
-    const findings: Finding[] = [];
-
-    if (!context.config || !context.filePath.includes('app.json')) {
-      return findings;
-    }
-
-    const expo = context.config.expo;
-    if (!expo) return findings;
-
-    // Check extra/config for exposed secrets
-    const configSections = [expo.extra, expo.plugins, expo.ios?.config, expo.android?.config];
-    const sensitiveKeyPatterns = ['secret', 'apikey', 'api_key', 'private_key', 'privatekey', 'password',
-                                  'client_secret', 'clientsecret', 'access_token', 'accesstoken'];
-
-    function checkObject(obj: any, path: string): void {
-      if (!obj || typeof obj !== 'object') return;
-
-      for (const [key, value] of Object.entries(obj)) {
-        const lowerKey = key.toLowerCase();
-        const isSecretKey = sensitiveKeyPatterns.some(p => lowerKey.includes(p));
-
-        if (isSecretKey && typeof value === 'string' && value.length > 0) {
-          // Skip placeholder/env references
-          const lowerValue = value.toLowerCase();
-          if (lowerValue.includes('process.env') || lowerValue.includes('${') ||
-              lowerValue.includes('your_') || lowerValue.includes('placeholder') ||
-              lowerValue.includes('example') || lowerValue.includes('xxx')) {
-            continue;
-          }
-
-          findings.push({
-            ruleId: 'EXPO_SENSITIVE_CONFIG_EXPOSED',
-            description: `Sensitive config key "${key}" exposed in app.json at ${path}`,
-            severity: Severity.HIGH,
-            filePath: context.filePath,
-            suggestion: 'Move sensitive values to environment variables. Use app.config.js with process.env to inject secrets at build time.',
-          });
-        }
-
-        if (typeof value === 'object' && value !== null) {
-          checkObject(value, `${path}.${key}`);
-        }
-      }
-    }
-
-    if (expo.extra) checkObject(expo.extra, 'expo.extra');
-    if (expo.ios?.config) checkObject(expo.ios.config, 'expo.ios.config');
-    if (expo.android?.config) checkObject(expo.android.config, 'expo.android.config');
-
-    return findings;
-  },
-};
-
 export const configRules: RuleGroup = {
   category: RuleCategory.CONFIG,
   rules: [
     expoInsecurePermissionsRule,
     expoUpdatesInsecureUrlRule,
-    expoSensitiveConfigExposedRule,
   ],
 };

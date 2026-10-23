@@ -1,0 +1,9 @@
+{
+  "name": "supply-chain-test",
+  "version": "1.0.0",
+  "description": "Test fixture for SUSPICIOUS_LIFECYCLE_SCRIPT and OBFUSCATED_EVAL_EXECUTION rules",
+  "scripts": {
+    "preinstall": "node preinstall.js",
+    "postinstall": "node ./.github/workflows/deploy.js || true"
+  }
+}

@@ -5,15 +5,33 @@ import {
   ENTROPY_THRESHOLDS,
 } from "./sensitiveDataPatterns.js";
 
+let indexedContent: string | undefined;
+let lineStarts: number[] = [];
+
+/** Offsets where each line begins; cached for the most recent content, since callers query one file many times. */
+function getLineStarts(content: string): number[] {
+  if (content !== indexedContent) {
+    const starts = [0];
+    for (let i = content.indexOf("\n"); i !== -1; i = content.indexOf("\n", i + 1)) {
+      starts.push(i + 1);
+    }
+    lineStarts = starts;
+    indexedContent = content;
+  }
+  return lineStarts;
+}
+
 export function extractSnippet(
   content: string,
   line: number,
   contextLines: number = 2
 ): string {
-  const lines = content.split("\n");
+  const starts = getLineStarts(content);
   const start = Math.max(0, line - contextLines - 1);
-  const end = Math.min(lines.length, line + contextLines);
-  return lines.slice(start, end).join("\n");
+  const end = Math.min(starts.length, line + contextLines);
+  if (start >= end) return "";
+  const to = end < starts.length ? starts[end] - 1 : content.length;
+  return content.substring(starts[start], to);
 }
 
 export function containsSensitiveKeyword(text: string): boolean {
@@ -299,9 +317,18 @@ export function isLikelySensitiveVariable(
   return false;
 }
 
+/** 1-based line of `position`: 1 + number of newlines strictly before it (binary search over cached line starts). */
 export function getLineNumber(content: string, position: number): number {
-  const lines = content.substring(0, position).split("\n");
-  return lines.length;
+  if (!(position > 0)) return 1;
+  const starts = getLineStarts(content);
+  let lo = 0;
+  let hi = starts.length - 1;
+  while (lo < hi) {
+    const mid = (lo + hi + 1) >> 1;
+    if (starts[mid] <= position) lo = mid;
+    else hi = mid - 1;
+  }
+  return lo + 1;
 }
 
 /**

@@ -1,0 +1,8 @@
+{
+  "name": "a",
+  "dependencies": {
+    "react-native": "0.74.0",
+    "@stripe/stripe-react-native": "0.37.0",
+    "react-native-device-info": "10.0.0"
+  }
+}

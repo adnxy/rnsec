@@ -1,0 +1,13 @@
+export const a = 'https://user:pass@host.example-corp.com';
+export const b = 'https://username:password@host.example-corp.com';
+export const c = `https://${user}:${pass}@host.example-corp.com`;
+export const d = 'https://<user>:<password>@host.example-corp.com';
+export const e = 'https://api.example-corp.com:8443/path';
+export const f = 'Basic ';
+export const g = btoa(`${user}:${pass}`);
+export const h = btoa('only-one-part');
+export const i = btoa('user:pass');
+export const j = Buffer.from(token).toString('base64');
+export const k = { Authorization: `Basic ${encoded}` };
+export const l = 'https://example.com/a:b@c';
+export const m = '/users/:id/posts/:postId';

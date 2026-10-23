@@ -94,11 +94,11 @@ const KNOWN_VULNERABLE_PACKAGES: VulnerablePackage[] = [
   },
   {
     name: 'node-fetch',
-    vulnerableVersions: ['<2.6.7', '<3.0.0'],
+    vulnerableVersions: ['<2.6.7', '>=3.0.0 <3.1.1'],
     severity: Severity.HIGH,
     cve: 'CVE-2022-0235',
     description: 'Information exposure vulnerability',
-    fixVersion: '2.6.7',
+    fixVersion: '2.6.7', // 3.x is fixed in 3.1.1
   },
   {
     name: 'express',
@@ -169,16 +169,52 @@ function convertNpmSeverity(npmSeverity: string): Severity {
 }
 
 /**
- * Check if a version matches a vulnerable version pattern
+ * The lowest concrete version a package.json range declares ("^1.2.3" -> "1.2.3"),
+ * or null when it is not a plain semver range (latest, *, workspace:, git URLs, tags, ...).
+ */
+function declaredFloor(version: string): string | null {
+  const m = version.trim().match(/^[\^~>=<v\s]*(\d+(?:\.\d+){0,2})(?:[-+][\w.-]+)?$/);
+  return m ? m[1] : null;
+}
+
+/**
+ * Check if a version matches a vulnerable version pattern.
+ * A pattern is a single "<x.y.z" bound or a range such as ">=3.0.0 <3.1.1".
  */
 function isVulnerableVersion(version: string, pattern: string): boolean {
-  const cleanVersion = version.replace(/^[~^>=<]/, '').trim();
-  
-  if (pattern.startsWith('<')) {
-    const targetVersion = pattern.substring(1);
-    return compareVersions(cleanVersion, targetVersion) < 0;
+  const floor = declaredFloor(version);
+  if (!floor) return false;
+
+  return pattern.split(/\s+/).filter(Boolean).every(part => {
+    const m = part.match(/^(>=|<=|<|>)(.+)$/);
+    if (!m) return false;
+    const cmp = compareVersions(floor, m[2]);
+    switch (m[1]) {
+      case '<': return cmp < 0;
+      case '<=': return cmp <= 0;
+      case '>': return cmp > 0;
+      default: return cmp >= 0;
+    }
+  });
+}
+
+/**
+ * ^ and ~ ranges can resolve to a patched release on install: "^4.17.0" includes 4.17.21,
+ * "^0.18.0" does not include 0.21.1. Used to lower confidence when only the declared floor is vulnerable.
+ */
+function rangeMayResolveToFix(version: string, fixVersion: string | undefined): boolean {
+  const floor = declaredFloor(version);
+  if (!floor || !fixVersion) return false;
+  const op = version.trim()[0];
+  const f = floor.split('.').map(Number);
+  const x = fixVersion.split('.').map(Number);
+  if (op === '^') {
+    const sameLine = f[0] > 0 ? f[0] === x[0] : f[0] === x[0] && (f[1] || 0) === (x[1] || 0);
+    return sameLine && compareVersions(floor, fixVersion) <= 0;
   }
-  
+  if (op === '~') {
+    return f[0] === x[0] && (f[1] || 0) === (x[1] || 0) && compareVersions(floor, fixVersion) <= 0;
+  }
   return false;
 }
 
@@ -226,6 +262,34 @@ function findScriptKeyLine(content: string, scriptKey: string): number {
   return 1;
 }
 
+/** Interpreters/downloaders that turn a hidden failure into a real concern */
+const RISKY_SCRIPT_COMMANDS = new Set([
+  'node', 'nodejs', 'curl', 'wget', 'eval', 'bash', 'sh', 'zsh', 'powershell', 'pwsh',
+  'python', 'python3', 'cmd', 'nc', 'ncat', 'perl', 'ruby',
+]);
+
+/** Build/setup tools that legitimately appear in lifecycle scripts, often followed by `|| true` */
+const ALLOWED_SCRIPT_COMMANDS = new Set([
+  'patch-package', 'husky', 'is-ci', 'jetify', 'pod-install', 'pod', 'node-gyp', 'node-gyp-build',
+  'prebuild-install', 'rimraf', 'tsc', 'bob', 'lefthook', 'simple-git-hooks', 'electron-builder',
+  'cross-env', 'npm', 'yarn', 'pnpm', 'true', 'echo', ':',
+]);
+
+/** First real command of each `&&`/`||`/`;`/`|` segment, looking through env assignments and runners */
+function lifecycleCommands(script: string): string[] {
+  const commands: string[] = [];
+  for (const segment of script.split(/&&|\|\||;|\|/)) {
+    const tokens = segment.trim().split(/\s+/).filter(Boolean);
+    while (tokens.length && /^[A-Za-z_][A-Za-z0-9_]*=/.test(tokens[0])) tokens.shift();
+    if (tokens[0] === 'npx' || (tokens[0] === 'pnpm' && tokens[1] === 'exec')) {
+      tokens.splice(0, tokens[0] === 'npx' ? 1 : 2);
+      while (tokens[0]?.startsWith('-')) tokens.shift();
+    }
+    if (tokens[0]) commands.push(tokens[0].replace(/^["']|["']$/g, ''));
+  }
+  return commands;
+}
+
 /**
  * Supply chain: detect suspicious lifecycle scripts (postinstall/preinstall) that run
  * node on non-standard paths or use || true to hide failures (common in malicious commits).
@@ -249,18 +313,25 @@ const suspiciousLifecycleScriptRule: Rule = {
 
     const lifecycleHooks = ['postinstall', 'preinstall', 'install'];
     const suspiciousPatterns = [
-      /.github\/workflows\/.*\.js/,           // script in workflows dir (e.g. deploy.js)
+      /\.github\/workflows\/.*\.js/,         // script in workflows dir (e.g. deploy.js)
       /(^|\s)node\s+.*preinstall\.js/,       // node preinstall.js
       /(^|\s)node\s+.*postinstall\.js/,      // node postinstall.js
-      /\|\|\s*true\s*$/,                     // || true hides script failure
     ];
+    const hidesFailure = /\|\|\s*true\s*$/;    // || true hides script failure
 
     for (const hook of lifecycleHooks) {
       const script = scripts[hook];
       if (typeof script !== 'string') continue;
 
       const scriptNorm = script.trim();
-      const isSuspicious = suspiciousPatterns.some((re) => re.test(scriptNorm));
+      let isSuspicious = suspiciousPatterns.some((re) => re.test(scriptNorm));
+
+      // `patch-package || true` is common; `|| true` only matters next to a risky or unknown command
+      if (!isSuspicious && hidesFailure.test(scriptNorm)) {
+        isSuspicious = lifecycleCommands(scriptNorm).some(
+          cmd => RISKY_SCRIPT_COMMANDS.has(cmd) || !ALLOWED_SCRIPT_COMMANDS.has(cmd)
+        );
+      }
 
       if (isSuspicious) {
         const lineNum = findScriptKeyLine(context.fileContent, hook);
@@ -364,6 +435,8 @@ const packageJsonVulnerabilityRule: Rule = {
       for (const vulnPattern of vulnerable.vulnerableVersions) {
         if (isVulnerableVersion(pkgVersion, vulnPattern)) {
           const lineNum = findPackageLine(context.fileContent, pkgName);
+          // The lockfile may already pin a patched release inside the declared range
+          const mayBePatched = rangeMayResolveToFix(pkgVersion, vulnerable.fixVersion);
           
           findings.push({
             ruleId: 'NPM_VULNERABLE_DEPENDENCY',
@@ -374,7 +447,9 @@ const packageJsonVulnerabilityRule: Rule = {
             snippet: extractSnippet(context.fileContent, lineNum),
             suggestion: `Update "${pkgName}" to version ${vulnerable.fixVersion || 'latest'}. Run: npm install ${pkgName}@${vulnerable.fixVersion || 'latest'}`,
             category: 'npm',
+            ...(mayBePatched ? { confidence: 'low' as const } : {}),
           });
+          break; // one finding per package even if several patterns match
         }
       }
     }
@@ -401,36 +476,42 @@ const deprecatedPackagesRule: Rule = {
     }
 
     const packageJson = context.config;
-    const allDependencies = {
-      ...packageJson.dependencies,
-      ...packageJson.devDependencies,
-    };
+    const excludeDevDeps = globalRnsecConfig?.npmVulnerabilityScanning?.excludeDevDependencies || false;
+    const prodDependencies = { ...packageJson.dependencies, ...packageJson.optionalDependencies };
+    const devDependencies = excludeDevDeps ? {} : { ...packageJson.devDependencies };
 
-    // List of known deprecated packages
-    const deprecatedPackages = [
+    // List of known deprecated packages. `safeVersion` exempts a version that is known to be fine.
+    const deprecatedPackages: Array<{ name: string; replacement: string; note?: string; safeVersion?: string }> = [
       { name: 'request', replacement: 'axios or node-fetch' },
       { name: 'node-uuid', replacement: 'uuid' },
       { name: 'gulp-util', replacement: 'individual gulp utilities' },
       { name: 'istanbul', replacement: 'nyc' },
-      { name: 'colors', replacement: 'chalk (after colors sabotage incident)' },
-      { name: 'faker', replacement: '@faker-js/faker' },
+      { name: 'colors', replacement: 'chalk (after colors sabotage incident)', note: 'maintainer sabotage in 1.4.1/1.4.2; 1.4.0 is unaffected', safeVersion: '1.4.0' },
+      { name: 'faker', replacement: '@faker-js/faker', note: 'maintainer sabotage of 6.6.6; 5.5.3 is unaffected', safeVersion: '5.5.3' },
     ];
 
     for (const pkg of deprecatedPackages) {
-      if (allDependencies[pkg.name]) {
-        const lineNum = findPackageLine(context.fileContent, pkg.name);
-        
-        findings.push({
-          ruleId: 'DEPRECATED_NPM_PACKAGE',
-          description: `Package "${pkg.name}" is deprecated`,
-          severity: Severity.MEDIUM,
-          filePath: context.filePath,
-          line: lineNum,
-          snippet: extractSnippet(context.fileContent, lineNum),
-          suggestion: `Replace "${pkg.name}" with ${pkg.replacement}. Deprecated packages no longer receive security updates.`,
-          category: 'npm',
-        });
-      }
+      const inProd = typeof prodDependencies[pkg.name] === 'string';
+      const spec: unknown = inProd ? prodDependencies[pkg.name] : devDependencies[pkg.name];
+      if (typeof spec !== 'string') continue;
+
+      // Pinned exactly to the known-good release
+      if (pkg.safeVersion && spec.trim() === pkg.safeVersion) continue;
+
+      const lineNum = findPackageLine(context.fileContent, pkg.name);
+      // Packages only used for tooling never ship in the app bundle
+      const severity = inProd ? Severity.MEDIUM : Severity.LOW;
+
+      findings.push({
+        ruleId: 'DEPRECATED_NPM_PACKAGE',
+        description: `Package "${pkg.name}" is deprecated${pkg.note ? ` (${pkg.note})` : ''}${inProd ? '' : ' (devDependency)'}`,
+        severity,
+        filePath: context.filePath,
+        line: lineNum,
+        snippet: extractSnippet(context.fileContent, lineNum),
+        suggestion: `Replace "${pkg.name}" with ${pkg.replacement}. Deprecated packages no longer receive security updates.`,
+        category: 'npm',
+      });
     }
 
     return findings;

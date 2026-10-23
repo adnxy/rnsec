@@ -1,0 +1,6 @@
+{
+  "name": "lifecycle-dot",
+  "scripts": {
+    "postinstall": "node ./xgithub/workflows/setup.js"
+  }
+}

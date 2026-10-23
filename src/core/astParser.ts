@@ -12,7 +12,8 @@ export async function parseJSFile(filePath: string, source: string): Promise<Par
     const ast = parse(source, {
       sourceType: 'module',
       plugins: [
-        'jsx',
+        // plain .ts cannot contain JSX, and with the jsx plugin `<any>window` parses as an element
+        ...(/\.[cm]?ts$/.test(filePath) ? [] : ['jsx' as const]),
         'typescript',
         'decorators-legacy',
         'classProperties',

@@ -4,6 +4,8 @@ export enum Severity {
   LOW = 'LOW',
 }
 
+export type Confidence = 'high' | 'medium' | 'low';
+
 export interface Finding {
   ruleId: string;
   description: string;
@@ -16,6 +18,10 @@ export interface Finding {
   suggestion?: string;
   isDebugContext?: boolean;
   category?: string; // e.g., "npm", "config", "code"
+  /** How likely this is a real issue (heuristic/absence rules report `low`). Missing = high. */
+  confidence?: Confidence;
+  /** Stable identity (sha256) used by baselines and SARIF; independent of line numbers */
+  fingerprint?: string;
 }
 
 export interface ScanResult {
@@ -24,5 +30,9 @@ export interface ScanResult {
   duration: number;
   timestamp: Date;
   ignoredRules?: string[];
+  /** Findings dropped by `rnsec-ignore` comments */
+  suppressedCount?: number;
+  /** Findings dropped because their fingerprint is listed in the baseline */
+  baselinedCount?: number;
 }
 

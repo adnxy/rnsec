@@ -1,0 +1,9 @@
+{
+  "name": "a",
+  "dependencies": {
+    "react-native": "0.74.0",
+    "@stripe/stripe-react-native": "0.37.0",
+    "jail-monkey": "2.8.0",
+    "react-native-google-play-integrity": "1.0.0"
+  }
+}

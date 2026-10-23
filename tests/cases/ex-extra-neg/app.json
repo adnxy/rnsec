@@ -1,0 +1,17 @@
+{
+  "expo": {
+    "name": "demo",
+    "extra": {
+      "apiBase": "https://api.example-corp.com",
+      "supabaseAnonKey": "fake-anon-value-123",
+      "stripePublishableKey": "fake-publishable-123",
+      "clientSecret": "",
+      "apiSecret": "changeme",
+      "dbPassword": "your-password-here",
+      "tokenSecret": "<set me>",
+      "otherSecret": "${OTHER_SECRET}",
+      "passwordMinLength": "12",
+      "secretEnabled": true
+    }
+  }
+}

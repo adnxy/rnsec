@@ -1,0 +1,27 @@
+{
+  "expo": {
+    "name": "demo",
+    "android": {
+      "allowBackup": true
+    },
+    "ios": {
+      "infoPlist": {
+        "UIFileSharingEnabled": true,
+        "NSAppTransportSecurity": {
+          "NSAllowsArbitraryLoads": true
+        }
+      }
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true
+          }
+        }
+      ]
+    ]
+  }
+}

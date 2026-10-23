@@ -12,30 +12,29 @@ jobs:
     
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v7
       with:
         fetch-depth: 0  # Fetch full history for git diff
     
     - name: Setup Node.js
-      uses: actions/setup-node@v4
+      uses: actions/setup-node@v7
       with:
-        node-version: '18'
+        node-version: '20'
         cache: 'npm'
     
     - name: Install rnsec
       run: npm install -g rnsec
     
     - name: Run security scan on changed files
-      run: |
-        # Generate markdown report for PR comment
-        rnsec scan --changed-files ${{ github.base_ref || 'main' }} --md security-report.md --silent
-        
-        # Also generate HTML and JSON reports for detailed analysis and comparison
-        rnsec scan --changed-files ${{ github.base_ref || 'main' }} --html security-report.html --output rnsec-report.json --silent
+      env:
+        BASE_REF: ${{ github.base_ref || 'main' }}
+      # One command writes all reports: a failing first scan (exit 1 on HIGH findings) would otherwise stop a second one.
+      # origin/<branch>: pull request checkouts have no local branch for the base.
+      run: rnsec scan --changed-files "origin/$BASE_REF" --md security-report.md --html security-report.html --output rnsec-report.json --silent
       continue-on-error: true
     
     - name: Upload security reports
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: security-reports
         path: |
@@ -122,12 +121,12 @@ jobs:
       if: github.event_name == 'push'
       run: |
         # Run full scan on pushes to main branch
-        rnsec scan --md full-security-report.md --html full-security-report.html --json full-security-report.json
+        rnsec scan --md full-security-report.md --html full-security-report.html --output full-security-report.json
       continue-on-error: true
     
     - name: Upload full scan reports
       if: github.event_name == 'push'
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: full-security-reports
         path: |
