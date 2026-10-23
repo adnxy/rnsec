@@ -1,0 +1,21 @@
+{
+  "name": "deps-good",
+  "version": "1.0.0",
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-native": "0.74.0",
+    "@acme/shared": "workspace:*",
+    "local-lib": "file:../local-lib",
+    "linked": "link:../linked",
+    "portal-lib": "portal:../portal",
+    "patched": "patch:left-pad@npm%3A1.3.0#./patches/left-pad.patch",
+    "aliased": "npm:react-native-svg@^15.0.0",
+    "catalogued": "catalog:",
+    "tilde": "~1.2.3",
+    "range": ">=1.0.0 <2.0.0",
+    "next-tag": "1.0.0-beta.1"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0"
+  }
+}

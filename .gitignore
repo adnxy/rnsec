@@ -9,6 +9,13 @@ rnsec-report.html
 rnsec-report.json
 *.html
 *.json
+# ...except test fixtures
+!tests/**/*.json
+!tests/**/*.html
+# ...and example project manifests (but not the reports generated inside them)
+!examples/**/*.json
+examples/**/rnsec-report.json
+.build-*/
 
 # IDE
 .vscode/

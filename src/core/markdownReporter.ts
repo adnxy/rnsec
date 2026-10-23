@@ -149,7 +149,9 @@ ${this.generateRiskAssessment(high, medium, low)}
                    finding.severity === 'MEDIUM' ? '🟡' : '🔵';
       
       const location = finding.filePath ? `\`${this.formatFilePath(finding.filePath)}${finding.line ? `:${finding.line}` : ''}\`` : '';
-      const debugBadge = finding.isDebugContext ? ' 🐛 [DEBUG]' : '';
+      const debugBadge =
+        (finding.isDebugContext ? ' 🐛 [DEBUG]' : '') +
+        (finding.confidence && finding.confidence !== 'high' ? ` _(${finding.confidence} confidence)_` : '');
       
       section += `${index + 1}. **${icon} ${finding.description || finding.ruleId}**${debugBadge}\n`;
       if (location) {

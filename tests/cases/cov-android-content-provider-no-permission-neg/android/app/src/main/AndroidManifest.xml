@@ -1,0 +1,10 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.example.app">
+  <application android:label="App" android:allowBackup="false">
+    <provider
+      android:name="com.example.app.FilesProvider"
+      android:authorities="com.example.app.files"
+      android:exported="true"
+      android:readPermission="com.example.app.permission.READ_FILES"
+      android:writePermission="com.example.app.permission.WRITE_FILES" />
+  </application>
+</manifest>

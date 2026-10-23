@@ -10,6 +10,15 @@ A zero-configuration security scanner for React Native and Expo applications tha
 
 ---
 
+## What's new in 1.4.0
+
+- **18 new rules (105 total)**: committed signing keys and service accounts, hardcoded Android signing passwords, secrets in `eas.json` and bundled env vars, insecure `.npmrc`/`.yarnrc.yml`, `network_security_config.xml` checks, JWT/OAuth/SQLite/MMKV/cipher misuse and more. See the [CHANGELOG](CHANGELOG.md) for the full list.
+- **Built for CI**: SARIF 2.1.0 output for GitHub Code Scanning (`--sarif`), baselines for adopting rnsec on an existing codebase (`--baseline`, `--write-baseline`), a configurable failure threshold (`--fail-on`, `failOn`) and per-rule `severityOverrides`.
+- **Fewer false positives**: `__DEV__` guards now apply to the guarded code only, public-by-design keys are LOW, findings carry a `confidence`, and `.gitignore` is respected.
+- **Behaviour changes to be aware of** (more findings can appear, `--json` stdout is pure JSON, Node 20+ required): see the [upgrade notes](CHANGELOG.md#140---2026-10-23).
+
+---
+
 ## Installation
 
 ### Global Installation (Recommended)
@@ -96,7 +105,8 @@ rnsec rules
 ```bash
 rnsec scan --changed-files main
 rnsec scan --changed-files abc123
-rnsec scan --changed-files ${{ github.base_ref }}
+# In GitHub Actions (needs fetch-depth: 0 on checkout): origin/${{ github.base_ref }}
+rnsec scan --changed-files origin/${{ github.base_ref }}
 ```
 
 ### Command Options
@@ -109,17 +119,31 @@ Options:
   --html <filename>      Custom HTML report filename
   --output <filename>    Custom JSON report filename
   --md <filename>        Generate Markdown report for PR comments
-  --json                 Output JSON to console only (no files)
+  --json                 Output JSON to console only (no HTML/JSON files are written)
   --silent               Suppress console output
   --changed-files <ref>  Scan only files changed since git reference (branch, commit, or tag)
+  --min-confidence <l>   Only report findings at or above this confidence: low (default), medium, high
+  --fail-on <level>      Exit 1 when a finding at or above this severity is reported: high (default), medium, low, none
+  --sarif <filename>     Generate a SARIF 2.1.0 report (e.g. rnsec.sarif) for GitHub Code Scanning
+  --baseline <filename>  Hide findings that are listed in this baseline file
+  --write-baseline <f>   Write the current findings to a baseline file and exit 0
+  --no-gitignore         Also scan files that git ignores
   -h, --help             Display help information
   -V, --version          Display version number
 ```
 
+Notes:
+
+- `--json` prints the result to stdout and nothing else: informational lines go to stderr, so `rnsec scan --json | jq` works. It ignores `--html` and `--output`. `--md` and `--sarif` files are still written.
+- Without `--json`, rnsec writes `rnsec-report.html` and `rnsec-report.json` into the current directory (or the names you give with `--html` and `--output`).
+- `--changed-files` needs a git checkout.
+
 ### Exit Codes
 
-- `0` - No high-severity issues found
-- `1` - High-severity security issues detected
+- `0` - No finding at or above the `--fail-on` threshold (default `high`, so only HIGH findings fail the build)
+- `1` - A finding at or above the threshold was reported, or rnsec hit an error (invalid option value, unreadable baseline, `--changed-files` outside a git repository, ...)
+
+`--fail-on none` never fails on findings, and `--write-baseline` always exits 0. The threshold can also be set with `failOn` in the [config file](#configuration); the command line wins.
 
 ## Changed Files Scanning
 
@@ -150,19 +174,26 @@ The `--changed-files` option accepts any valid git reference:
 - **Tags**: `v1.0.0`, `release-2024`
 - **Special references**: `HEAD`, `origin/main`
 
+In CI checkouts there is usually no local branch for the target, so use `origin/<branch>` (and fetch full history, e.g. `fetch-depth: 0` in `actions/checkout`).
+
 ### CI/CD Integration
 
 **GitHub Actions:**
 ```yaml
+- uses: actions/checkout@v7
+  with:
+    fetch-depth: 0
 - name: Run security scan on PR changes
-  run: rnsec scan --changed-files ${{ github.base_ref }} --output security.json --silent
+  env:
+    BASE_REF: ${{ github.base_ref }}
+  run: rnsec scan --changed-files "origin/$BASE_REF" --output security.json --silent
 ```
 
 **GitLab CI:**
 ```yaml
 security-scan:
   script:
-    - rnsec scan --changed-files $CI_MERGE_REQUEST_TARGET_BRANCH_NAME --output security.json --silent
+    - rnsec scan --changed-files origin/$CI_MERGE_REQUEST_TARGET_BRANCH_NAME --output security.json --silent
 ```
 
 ### Benefits
@@ -226,7 +257,7 @@ jobs:
     
     steps:
     - name: Checkout code
-      uses: actions/checkout@v4
+      uses: actions/checkout@v7
       with:
         fetch-depth: 0
     
@@ -234,8 +265,9 @@ jobs:
       run: npm install -g rnsec
     
     - name: Run security scan
-      run: |
-        rnsec scan --changed-files ${{ github.base_ref || 'main' }} --md security-report.md --output rnsec-report.json --silent
+      env:
+        BASE_REF: ${{ github.base_ref || 'main' }}
+      run: rnsec scan --changed-files "origin/$BASE_REF" --md security-report.md --output rnsec-report.json --silent
       continue-on-error: true
     
     - name: Comment PR with security results
@@ -294,9 +326,76 @@ The enhanced markdown report includes:
 - **Risk assessment** with clear action items
 - **Performance metrics** and scan information
 
+## GitHub Code Scanning (SARIF)
+
+`--sarif <file>` writes a SARIF 2.1.0 report that GitHub shows in the Security tab and as inline annotations on pull requests:
+
+```yaml
+name: rnsec
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '20'
+      - run: npx rnsec scan --sarif rnsec.sarif --silent
+      - uses: github/codeql-action/upload-sarif@v4
+        if: always()
+        with:
+          sarif_file: rnsec.sarif
+```
+
+The step uses `if: always()` so the report is uploaded even when `rnsec scan` exits 1 because of HIGH findings. Add `--fail-on none` if the upload should be the only gate. Finding paths in the report are relative to the git repository root, and each result carries a stable fingerprint so GitHub can track alerts across commits.
+
+## Baselines
+
+A baseline lets you adopt rnsec on an existing codebase: record today's findings once, then fail only on new ones.
+
+```bash
+# 1. Record the current findings (always exits 0) and commit the file
+rnsec scan --write-baseline .rnsec-baseline.json
+
+# 2. From now on, only findings that are not in the baseline are reported
+rnsec scan --baseline .rnsec-baseline.json
+```
+
+You can also set `"baseline": ".rnsec-baseline.json"` in the [config file](#configuration) (relative to the scan root). Each finding is identified by a fingerprint of the rule ID, the file path, the whitespace-normalized source line and an occurrence index, not by its line number, so findings survive code moving around. Changing the flagged line itself makes the finding show up again. The number of hidden findings is printed and stored as `baselinedCount` in the JSON result. `--write-baseline` honors `--min-confidence`.
+
 ## Configuration
 
-rnsec supports configuration files to customize the scanning behavior. Create a `.rnsec.jsonc` or `.rnsec.json` file in your project root.
+rnsec supports configuration files to customize the scanning behavior. Create a `.rnsec.jsonc` or `.rnsec.json` file in your project root (rnsec looks for `.rnsec.json`, then `.rnsec.jsonc`, then `.rnsec.config.json`). The file is parsed as JSONC, so comments and trailing commas are allowed.
+
+```jsonc
+{
+  "ignoredRules": ["ASYNCSTORAGE_SENSITIVE_KEY"],
+  "exclude": ["**/scripts/**"],
+  "failOn": "high",                                // high (default) | medium | low | none
+  "severityOverrides": { "INSECURE_HTTP_URL": "LOW" },
+  "baseline": ".rnsec-baseline.json",
+  "respectGitignore": true,                        // default
+  "npmVulnerabilityScanning": { "enabled": true, "dataSource": "npm-audit", "excludeDevDependencies": false }
+}
+```
+
+| Key | Description |
+|-----|-------------|
+| `ignoredRules` | Rule IDs that never run |
+| `exclude` | Extra glob patterns to skip (see [Excluding Files](#excluding-files)) |
+| `failOn` | Severity that makes `rnsec scan` exit 1; same values as `--fail-on`, which takes precedence |
+| `severityOverrides` | Map of rule ID to `HIGH`, `MEDIUM` or `LOW`; applied to the reports, SARIF and the exit code |
+| `baseline` | Baseline file, relative to the scan root (see [Baselines](#baselines)) |
+| `respectGitignore` | `false` also scans git-ignored files, like `--no-gitignore` |
+| `npmVulnerabilityScanning` | `enabled`, `dataSource` (`npm-audit` or `hardcoded`) and `excludeDevDependencies` for the dependency checks |
 
 ### Ignoring Rules
 
@@ -306,12 +405,48 @@ You can ignore specific rules by adding them to the `ignoredRules` array:
 {
   "ignoredRules": [
     "ASYNCSTORAGE_SENSITIVE_KEY",
-    "LOGGING_SENSITIVE_DATA"
+    "SENSITIVE_LOGGING"
   ]
 }
 ```
 
 To find the rule ID for a specific finding, check the `ruleId` field in the JSON output or HTML report.
+
+### Changing a Rule's Severity
+
+Use `severityOverrides` to raise or lower a rule without disabling it, for example to treat a noisy rule as informational or to make a MEDIUM rule fail the build:
+
+```jsonc
+{
+  "severityOverrides": {
+    "INSECURE_HTTP_URL": "LOW",
+    "WEBVIEW_DOM_STORAGE_ENABLED": "HIGH"
+  }
+}
+```
+
+Unknown rule IDs print a warning, and an invalid severity is an error.
+
+### Suppressing a Single Finding
+
+Add an inline comment on the same line as the finding, or on its own line directly above it. The rule ID is mandatory (there is no blanket ignore), and any text after it is treated as the reason:
+
+```ts
+// rnsec-ignore: INSECURE_HTTP_URL legacy partner endpoint, tracked in SEC-123
+fetch('http://partner.example-corp.com/status');
+
+const key = 'AIza...'; // rnsec-ignore: API_KEY_EXPOSED restricted Firebase web key
+```
+
+Use `<!-- rnsec-ignore: RULE_ID -->` in `AndroidManifest.xml`, `Info.plist` and other XML files, and put multiple IDs in one comment separated by commas.
+
+### Automatic Exclusions and Dev-Only Code
+
+- Test, mock, fixture, story and vendored code is skipped automatically (`__tests__`, `__mocks__`, `*.test.*`, `*.spec.*`, `e2e`, `fixtures`, `mocks`, `node_modules`, `build`, `dist`, ...). Folder names are matched against the path **relative to the scan root**.
+- Code that only runs in development builds (`if (__DEV__) { ... }`, `__DEV__ && ...`, `NODE_ENV !== 'production'` branches) is not reported. This is decided **per finding**, so a `__DEV__` check elsewhere in a file never hides a real issue.
+- Files that `.gitignore` excludes are not scanned (tracked files are always scanned). Use `--no-gitignore` or `"respectGitignore": false` to scan them too. Outside a git checkout this has no effect.
+- `.env`, `.npmrc`/`.yarnrc.yml`, `gradle.properties` and signing-key or service-account files are only checked when git tracks them. Ignored local copies are never reported, and templates such as `.env.example` are skipped. In a folder that is not a git checkout these files are not checked at all.
+- Findings carry a `confidence` (`high`, `medium`, `low`). Heuristic rules report lower confidence; use `--min-confidence medium` to see only the more certain ones.
 
 ### Excluding Files
 
@@ -329,7 +464,7 @@ Any pattern supported by `fast-glob` can be used, for more information see [Patt
 
 ## What It Detects
 
-rnsec identifies 63 different security issues across 13 categories:
+rnsec identifies 105 different security issues across 13 categories:
 
 **Common vulnerabilities found:**
 
@@ -352,23 +487,25 @@ const hash = MD5(password);
 
 ## Security Rules
 
-rnsec implements 63 security rules covering:
+rnsec implements 105 security rules covering:
 
 | Category | Rules | Description |
 |----------|-------|-------------|
-| **Storage** | 7 | AsyncStorage security, encryption requirements, PII handling, Unencrypted MMKV |
-| **Network** | 13 | HTTP connections, SSL/TLS validation, WebView security |
-| **Authentication** | 6 | JWT handling, OAuth implementation, biometric authentication |
-| **Secrets** | 2 | API key detection (27+ patterns), hardcoded credentials |
-| **Cryptography** | 2 | Weak algorithms, hardcoded encryption keys |
-| **Logging** | 2 | Sensitive data exposure in logs |
-| **React Native** | 10 | Native bridge security, deep links, eval() usage |
-| **Debug** | 3 | Test credentials, development tools in production |
-| **Android** | 8 | Manifest security, Keystore issues, permission checks |
-| **iOS** | 8 | App Transport Security, Keychain usage, Info.plist |
-| **Config** | 1 | Dangerous permission configurations |
-| **WebView** | 1 | WebView injection vulnerabilities |
-| **Manifest** | 1 | Platform-specific manifest issues |
+| **Storage** | 11 | AsyncStorage, MMKV, Realm and SQLite encryption, SQL injection, SecureStore options, file storage, clipboard, redux-persist |
+| **Network** | 7 | HTTP/WebSocket connections, request timeouts, TLS configuration, certificate pinning, disabled TLS validation, hardcoded IPs |
+| **Authentication** | 8 | JWT handling and signing, OAuth flows and PKCE, biometrics, session timeout, secure text inputs |
+| **Secrets** | 6 | API key detection (provider-specific patterns), bundled env secrets, committed `.env` files, committed keystores and service-account files, basic-auth credentials |
+| **Cryptography** | 5 | Weak hashes, weak ciphers/ECB mode/static IVs, hardcoded encryption keys, custom crypto, insecure randomness |
+| **Logging** | 2 | Sensitive data exposure in logs and error messages |
+| **React Native** | 13 | Native bridge, deep links, `Linking.openURL`, `eval()`, deserialization, navigation params, push notifications, screenshots, integrity checks, SDK risk |
+| **Debug** | 4 | Test credentials, debug endpoints, dev tools and network loggers in production |
+| **WebView** | 11 | JS injection, file access, origin whitelist, mixed content, navigation, postMessage, DOM storage, geolocation, caching, headers |
+| **Android** | 15 | Manifest security, exported components, backup, Keystore, `network_security_config.xml`, hardcoded signing passwords in Gradle |
+| **iOS** | 12 | App Transport Security, Keychain, pasteboard, file sharing, Info.plist, snapshot protection |
+| **Expo / EAS** | 6 | `app.json`/`app.config.*` settings and secrets, `eas.json` secrets, update URL and code signing, permissions |
+| **Supply chain** | 5 | Vulnerable/deprecated dependencies, suspicious lifecycle scripts, non-registry dependency sources, insecure `.npmrc`/`.yarnrc.yml` |
+
+Run `rnsec rules` to list every rule with its default severity. Severity is the default: some rules report a lower or higher level depending on context, and `severityOverrides` can change it.
 
 ### API Key Detection
 
@@ -394,7 +531,7 @@ rnsec detects 27+ types of hardcoded API keys and secrets:
 
 ## Reports
 
-rnsec generates two report formats automatically:
+rnsec generates two report formats automatically, and can add more on request:
 
 ### HTML Report
 - Interactive dashboard with filtering capabilities
@@ -408,6 +545,10 @@ rnsec generates two report formats automatically:
 - CI/CD pipeline integration
 - Programmatic analysis
 - Default filename: `rnsec-report.json`
+
+### Markdown and SARIF
+- `--md <file>` writes a Markdown report for pull request comments
+- `--sarif <file>` writes SARIF 2.1.0 for [GitHub Code Scanning](#github-code-scanning-sarif)
 
 ## CI/CD Integration
 
@@ -428,12 +569,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
       
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
-          node-version: '18'
+          node-version: '20'
       
       - name: Install rnsec
         run: npm install -g rnsec
@@ -442,7 +583,7 @@ jobs:
         run: rnsec scan --output security.json --silent
       
       - name: Upload reports
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: security-report
@@ -514,7 +655,7 @@ Add to `.gitlab-ci.yml`:
 ```yaml
 security-scan:
   stage: test
-  image: node:18
+  image: node:20
   script:
     - npm install -g rnsec
     - rnsec scan --output security.json --silent
@@ -553,7 +694,7 @@ rnsec scan --path examples/secure-app
 
 ## Requirements
 
-- **Node.js**: Version 18 or higher
+- **Node.js**: Version 20 or higher
 - **Project Type**: React Native or Expo application
 
 ## Why Use rnsec?
@@ -562,7 +703,7 @@ rnsec scan --path examples/secure-app
 One command with zero configuration required. Works out of the box with any React Native or Expo project.
 
 ### Comprehensive
-63 security rules covering all major vulnerability categories from OWASP Mobile Top 10 to platform-specific issues.
+105 security rules covering all major vulnerability categories from OWASP Mobile Top 10 to platform-specific issues.
 
 ### Fast
 Scans complete projects in seconds using efficient static analysis techniques.
@@ -574,7 +715,7 @@ Purpose-built for React Native and Expo with Android and iOS platform-specific c
 Clear findings with code context, severity levels, and remediation guidance.
 
 ### CI/CD Ready
-JSON output and exit codes designed for automated security pipelines.
+JSON, Markdown and SARIF output, baselines and a configurable `--fail-on` exit code designed for automated security pipelines.
 
 ## Architecture
 
@@ -621,17 +762,13 @@ npm test
 npm link
 ```
 
-## Roadmap
-
-See [ROADMAP.md](ROADMAP.md) for upcoming features and planned improvements.
-
 ## Frequently Asked Questions
 
 **Q: Does rnsec modify my code?**  
 A: No. rnsec is a static analysis tool that only reads your code.
 
 **Q: Can I customize which rules run?**  
-A: Currently all rules run automatically. Custom rule configuration is planned for a future release.
+A: Yes. Disable a rule with `ignoredRules`, change its severity with `severityOverrides`, silence one finding with `// rnsec-ignore: RULE_ID`, or show only high-confidence findings with `--min-confidence`. See [Configuration](#configuration). Writing your own custom rules is not supported.
 
 **Q: Does it work with TypeScript?**  
 A: Yes. rnsec fully supports both JavaScript and TypeScript.
@@ -640,7 +777,7 @@ A: Yes. rnsec fully supports both JavaScript and TypeScript.
 A: rnsec focuses on mobile security. Web-specific checks are not included.
 
 **Q: How do I exclude files or directories?**  
-A: rnsec automatically respects `.gitignore`. Additional exclusion options are planned.
+A: rnsec skips tests, mocks, fixtures and build output by default, and you can add your own globs with the `exclude` setting in `.rnsec.json`/`.rnsec.jsonc` (see [Excluding Files](#excluding-files)). Files that `.gitignore` excludes are skipped too (use `--no-gitignore` to include them). Single findings can be silenced with `// rnsec-ignore: RULE_ID`.
 
 **Q: Does it replace manual security audits?**  
 A: No. rnsec is a complementary tool. Professional security audits are still recommended for production applications.
@@ -654,6 +791,8 @@ rnsec is a static analysis tool with inherent limitations:
 - **No Binary Analysis**: Does not analyze compiled native code
 - **Pattern-Based Detection**: May produce false positives or miss context-dependent issues
 - **Configuration Required**: Some security measures may be configured outside the codebase
+- **Native and Expo configuration**: `network_security_config.xml` is scanned directly, not resolved through the manifest's `android:networkSecurityConfig`; Expo config rules read only literal values in `app.config.js|ts`; CodePush code signing is not checked (Expo Updates signing is)
+- **Git checkout needed for some checks**: `.env`, credential and registry-config files are only reported when git tracks them
 
 ## Security Best Practices
 

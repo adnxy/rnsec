@@ -2,7 +2,8 @@ import _traverse from '@babel/traverse';
 const traverse = (_traverse as any).default || _traverse;
 import type { Rule, RuleContext, RuleGroup } from '../../types/ruleTypes.js';
 import { Severity, type Finding } from '../../types/findings.js';
-import { containsSensitiveKeyword, getLineNumber, extractSnippet } from '../../utils/stringUtils.js';
+import { getLineNumber, extractSnippet } from '../../utils/stringUtils.js';
+import { identifierEndsWithTerm } from '../../utils/identifierUtils.js';
 import { RuleCategory } from '../../types/ruleTypes.js';
 import { SENSITIVE_DATA_CATEGORIES } from '../../utils/sensitiveDataPatterns.js';
 
@@ -37,6 +38,92 @@ function categorizeSensitiveData(text: string): string {
   return SENSITIVE_DATA_CATEGORIES.SENSITIVE;
 }
 
+// Words that make a *value* sensitive when they name an identifier or property (userToken, API_KEY, data.password).
+const SENSITIVE_VALUE_TERMS: ReadonlySet<string> = new Set([
+  'password', 'passwd', 'pwd', 'passcode', 'credential',
+  'token', 'jwt', 'bearer', 'accesstoken', 'refreshtoken', 'idtoken', 'authtoken', 'sessiontoken', 'csrftoken',
+  'secret', 'secretkey', 'clientsecret', 'apikey', 'privatekey', 'encryptionkey',
+  'authorization', 'sessionid', 'cookie', 'otp',
+  'ssn', 'creditcard', 'cardnumber', 'cvv', 'cvc', 'iban', 'accountnumber',
+]);
+
+// `'token:'`, `'Password ='`: a label that announces the next argument is the sensitive value.
+const LABEL_PATTERN = /([A-Za-z_][A-Za-z0-9_ -]*?)\s*[:=]\s*$/;
+
+function isSensitiveName(name: string): boolean {
+  // Head word decides: `userToken` and `API_KEY` are secrets, `tokenCount` and `passwordStrength` are not.
+  return identifierEndsWithTerm(name, SENSITIVE_VALUE_TERMS);
+}
+
+/** Name of the value an expression reads (`token`, `data.password`, `headers['Authorization']`). */
+function readName(node: any): string | null {
+  if (node.type === 'Identifier') return node.name;
+  if (node.type === 'MemberExpression' || node.type === 'OptionalMemberExpression') {
+    if (!node.computed && node.property?.type === 'Identifier') return node.property.name;
+    if (node.computed && node.property?.type === 'StringLiteral') return node.property.value;
+  }
+  if (node.type === 'TSNonNullExpression' || node.type === 'TSAsExpression') return readName(node.expression);
+  return null;
+}
+
+interface Hit {
+  what: string;
+  fromLabel?: boolean;
+}
+
+/** Find a sensitive value among the leaves of an argument (identifier, member, template parts, `+` chain, object fields). */
+function findSensitiveValue(node: any, depth = 0): Hit | null {
+  if (!node || depth > 4) return null;
+
+  const name = readName(node);
+  if (name !== null) return isSensitiveName(name) ? { what: name } : null;
+
+  if (node.type === 'TemplateLiteral') {
+    for (const expr of node.expressions) {
+      const hit = findSensitiveValue(expr, depth + 1);
+      if (hit) return hit;
+    }
+    return null;
+  }
+
+  if (node.type === 'BinaryExpression' && node.operator === '+') {
+    return findSensitiveValue(node.left, depth + 1) ?? findSensitiveValue(node.right, depth + 1);
+  }
+
+  if (node.type === 'ObjectExpression') {
+    for (const prop of node.properties) {
+      if (prop.type !== 'ObjectProperty' || prop.computed) continue;
+      const key = prop.key.type === 'Identifier' ? prop.key.name : prop.key.type === 'StringLiteral' ? prop.key.value : null;
+      if (!key) continue;
+      // `{ password: '***' }` is redacted; `{ token }` and `{ password: pwd }` leak
+      const redacted = prop.value.type === 'StringLiteral' || prop.value.type === 'NumericLiteral' || prop.value.type === 'BooleanLiteral' || prop.value.type === 'NullLiteral';
+      if (!redacted && isSensitiveName(key)) return { what: `{ ${key} }` };
+      if (prop.value.type === 'ObjectExpression') {
+        const hit = findSensitiveValue(prop.value, depth + 1);
+        if (hit) return hit;
+      }
+    }
+  }
+
+  return null;
+}
+
+/** Text of a leading literal label (string, or leftmost part of a `'a' + b` chain) that names a sensitive value. */
+function sensitiveLabel(node: any): string | null {
+  const text =
+    node.type === 'StringLiteral' ? node.value :
+    node.type === 'TemplateLiteral' && node.expressions.length === 0 ? node.quasis[0]?.value?.cooked :
+    null;
+  if (!text) return null;
+  const m = LABEL_PATTERN.exec(text.trim());
+  return m && isSensitiveName(m[1].trim()) ? m[1].trim() : null;
+}
+
+function isLiteral(node: any): boolean {
+  if (node.type === 'TemplateLiteral') return node.expressions.length === 0;
+  return /Literal$/.test(node.type);
+}
+
 const sensitiveLoggingRule: Rule = {
   id: 'SENSITIVE_LOGGING',
   description: 'Sensitive data potentially logged to console',
@@ -46,14 +133,6 @@ const sensitiveLoggingRule: Rule = {
     const findings: Finding[] = [];
     
     if (!context.ast) {
-      return findings;
-    }
-
-    const filePath = context.filePath.toLowerCase();
-    if (filePath.includes('.test.') || 
-        filePath.includes('.spec.') || 
-        filePath.includes('/__tests__/') ||
-        filePath.includes('/tests/')) {
       return findings;
     }
 
@@ -68,78 +147,45 @@ const sensitiveLoggingRule: Rule = {
           node.callee.property.type === 'Identifier' &&
           ['log', 'error', 'warn', 'info', 'debug'].includes(node.callee.property.name)
         ) {
-          const codeContext = context.fileContent.substring(
-            Math.max(0, (node.start || 0) - 200),
-            Math.min(context.fileContent.length, (node.end || 0) + 50)
-          );
-          const hasDevCheck = /__DEV__|process\.env\.NODE_ENV/.test(codeContext);
-          
-          for (const arg of node.arguments) {
-            let hasSensitiveData = false;
-            let sensitiveContext = '';
-            let dataCategory = '';
-            
-            if (arg.type === 'StringLiteral' && arg.value) {
-              if (containsSensitiveKeyword(arg.value)) {
-                hasSensitiveData = true;
-                sensitiveContext = arg.value.length > 50 ? arg.value.substring(0, 50) + '...' : arg.value;
-                dataCategory = categorizeSensitiveData(arg.value);
+          let hit: Hit | null = null;
+          const args: any[] = node.arguments;
+
+          for (const arg of args) {
+            hit = findSensitiveValue(arg);
+            if (hit) break;
+          }
+          // `console.log('token:', response.data)`: the label says what the next value is
+          for (let i = 0; i + 1 < args.length && !hit; i++) {
+            const label = isLiteral(args[i + 1]) ? null : sensitiveLabel(args[i]);
+            if (label) hit = { what: label, fromLabel: true };
+          }
+          // `'token: ' + value`
+          if (!hit) {
+            for (const arg of args) {
+              if (arg.type === 'BinaryExpression' && arg.operator === '+') {
+                let leftmost = arg;
+                while (leftmost.type === 'BinaryExpression') leftmost = leftmost.left;
+                const label = sensitiveLabel(leftmost);
+                if (label && !isLiteral(arg.right)) hit = { what: label, fromLabel: true };
               }
             }
+          }
+
+          if (hit) {
+            const line = getLineNumber(context.fileContent, node.start || 0);
+            const consoleMethod = node.callee.property.name;
+            const dataCategory = categorizeSensitiveData(hit.what);
             
-            if (arg.type === 'Identifier' && arg.name) {
-              if (containsSensitiveKeyword(arg.name)) {
-                hasSensitiveData = true;
-                sensitiveContext = arg.name;
-                dataCategory = categorizeSensitiveData(arg.name);
-              }
-            }
-            
-            if (arg.type === 'MemberExpression') {
-              const memberStr = context.fileContent.substring(arg.start || 0, arg.end || 0);
-              if (containsSensitiveKeyword(memberStr)) {
-                hasSensitiveData = true;
-                sensitiveContext = memberStr;
-                dataCategory = categorizeSensitiveData(memberStr);
-              }
-            }
-            
-            if (arg.type === 'TemplateLiteral') {
-              const templateStr = context.fileContent.substring(arg.start || 0, arg.end || 0);
-              if (containsSensitiveKeyword(templateStr)) {
-                hasSensitiveData = true;
-                sensitiveContext = templateStr.length > 60 ? templateStr.substring(0, 60) + '...' : templateStr;
-                dataCategory = categorizeSensitiveData(templateStr);
-              }
-            }
-            
-            if (arg.type === 'ObjectExpression') {
-              const objectStr = context.fileContent.substring(arg.start || 0, arg.end || 0);
-              if (containsSensitiveKeyword(objectStr)) {
-                hasSensitiveData = true;
-                sensitiveContext = 'object containing sensitive fields';
-                dataCategory = categorizeSensitiveData(objectStr);
-              }
-            }
-            
-            if (hasSensitiveData) {
-              const line = getLineNumber(context.fileContent, node.start || 0);
-              const consoleMethod = node.callee.property.name;
-              
-              findings.push({
-                ruleId: 'SENSITIVE_LOGGING',
-                description: `console.${consoleMethod}() logging ${dataCategory}: ${sensitiveContext}`,
-                severity: hasDevCheck ? Severity.LOW : Severity.MEDIUM,
-                filePath: context.filePath,
-                line,
-                snippet: extractSnippet(context.fileContent, line),
-                suggestion: hasDevCheck 
-                  ? 'Consider using a secure logging service instead of console logs, even in development.'
-                  : 'Remove console logs with sensitive data or wrap in __DEV__ check. Use a logging library with data filtering for production.',
-              });
-              
-              break;
-            }
+            findings.push({
+              ruleId: 'SENSITIVE_LOGGING',
+              description: `console.${consoleMethod}() logging ${dataCategory}: ${hit.what}`,
+              severity: Severity.MEDIUM,
+              ...(hit.fromLabel ? { confidence: 'medium' as const } : {}),
+              filePath: context.filePath,
+              line,
+              snippet: extractSnippet(context.fileContent, line),
+              suggestion: 'Remove console logs with sensitive data or wrap in __DEV__ check. Use a logging library with data filtering for production.',
+            });
           }
         }
       },
@@ -148,6 +194,27 @@ const sensitiveLoggingRule: Rule = {
     return findings;
   },
 };
+
+const ERROR_OBJECT_NAMES = new Set(['error', 'err', 'exception']);
+
+/** `error.message` / `err.stack` on a plain error variable (not `stderr.message` or `this.error.message`). */
+function isErrorDetailAccess(node: any, errorNames: Set<string>): boolean {
+  return (
+    node?.type === 'MemberExpression' &&
+    !node.computed &&
+    node.object?.type === 'Identifier' &&
+    errorNames.has(node.object.name) &&
+    (node.property?.name === 'message' || node.property?.name === 'stack')
+  );
+}
+
+function isUserFacingAlert(callee: any): boolean {
+  return (
+    (callee.type === 'Identifier' && (callee.name === 'alert' || callee.name === 'Alert')) ||
+    (callee.type === 'MemberExpression' && callee.object?.type === 'Identifier' &&
+      callee.object.name === 'Alert' && callee.property?.name === 'alert')
+  );
+}
 
 const sensitiveDataInErrorMessagesRule: Rule = {
   id: 'SENSITIVE_DATA_IN_ERROR_MESSAGES',
@@ -166,23 +233,27 @@ const sensitiveDataInErrorMessagesRule: Rule = {
         const { node } = path;
         
         // Check for error logging or displaying
-        const isErrorHandling = 
-          (node.callee.type === 'MemberExpression' &&
-           node.callee.object.name === 'console' &&
-           (node.callee.property.name === 'error' || node.callee.property.name === 'warn')) ||
-          (node.callee.type === 'Identifier' &&
-           (node.callee.name === 'alert' || node.callee.name === 'Alert'));
+        const isConsole =
+          node.callee.type === 'MemberExpression' &&
+          node.callee.object.name === 'console' &&
+          (node.callee.property.name === 'error' || node.callee.property.name === 'warn');
+        const isErrorHandling = isConsole || (node.callee.type === 'Identifier' && isUserFacingAlert(node.callee));
 
         if (isErrorHandling) {
+          // A console log only reaches device logs; showing it to the user is the real exposure.
+          const confidence = isConsole ? ('low' as const) : undefined;
+
           for (const arg of node.arguments) {
             // Check if error object or message is being logged directly
-            if (arg.type === 'Identifier' && (arg.name === 'error' || arg.name === 'err' || arg.name === 'exception')) {
+            if (arg.type === 'Identifier' && ERROR_OBJECT_NAMES.has(arg.name)) {
               const line = getLineNumber(context.fileContent, node.start || 0);
               
               findings.push({
                 ruleId: 'SENSITIVE_DATA_IN_ERROR_MESSAGES',
                 description: 'Error object logged directly - may contain sensitive data or stack traces',
-                severity: Severity.MEDIUM,
+                // console output only reaches device logs; showing the error to the user is the real exposure
+                severity: isConsole ? Severity.LOW : Severity.MEDIUM,
+                ...(confidence ? { confidence } : {}),
                 filePath: context.filePath,
                 line,
                 snippet: extractSnippet(context.fileContent, line),
@@ -191,21 +262,19 @@ const sensitiveDataInErrorMessagesRule: Rule = {
             }
             
             // Check for error.message being shown to users
-            if (arg.type === 'MemberExpression') {
-              const memberStr = context.fileContent.substring(arg.start || 0, arg.end || 0);
-              if (memberStr.includes('error.message') || memberStr.includes('err.message') || memberStr.includes('error.stack')) {
-                const line = getLineNumber(context.fileContent, node.start || 0);
-                
-                findings.push({
-                  ruleId: 'SENSITIVE_DATA_IN_ERROR_MESSAGES',
-                  description: 'Backend error message or stack trace exposed to user',
-                  severity: Severity.MEDIUM,
-                  filePath: context.filePath,
-                  line,
-                  snippet: extractSnippet(context.fileContent, line),
-                  suggestion: 'Use generic error messages for users. Log detailed errors server-side only. Never expose stack traces or backend errors.',
-                });
-              }
+            if (isErrorDetailAccess(arg, ERROR_OBJECT_NAMES)) {
+              const line = getLineNumber(context.fileContent, node.start || 0);
+              
+              findings.push({
+                ruleId: 'SENSITIVE_DATA_IN_ERROR_MESSAGES',
+                description: 'Backend error message or stack trace exposed to user',
+                severity: Severity.MEDIUM,
+                ...(confidence ? { confidence } : {}),
+                filePath: context.filePath,
+                line,
+                snippet: extractSnippet(context.fileContent, line),
+                suggestion: 'Use generic error messages for users. Log detailed errors server-side only. Never expose stack traces or backend errors.',
+              });
             }
           }
         }
@@ -214,11 +283,26 @@ const sensitiveDataInErrorMessagesRule: Rule = {
       // Check for catch blocks that expose errors directly
       CatchClause(path: any) {
         const { node } = path;
-        const catchBody = context.fileContent.substring(node.start || 0, node.end || 0);
-        
-        // Check if error is being alerted or shown to user without sanitization
-        if ((catchBody.includes('Alert.alert') || catchBody.includes('alert(')) && 
-            (catchBody.includes('error.message') || catchBody.includes('err.message') || catchBody.includes('error.stack'))) {
+        const errorNames = new Set(ERROR_OBJECT_NAMES);
+        if (node.param?.type === 'Identifier') errorNames.add(node.param.name);
+
+        let exposes = false;
+        path.traverse({
+          CallExpression(inner: any) {
+            if (exposes || !isUserFacingAlert(inner.node.callee)) return;
+            // Alert.alert('Failed', error.message) or `Failed: ${error.message}`
+            inner.traverse({
+              MemberExpression(member: any) {
+                if (isErrorDetailAccess(member.node, errorNames)) {
+                  exposes = true;
+                  member.stop();
+                }
+              },
+            });
+          },
+        });
+
+        if (exposes) {
           const line = getLineNumber(context.fileContent, node.start || 0);
           
           findings.push({

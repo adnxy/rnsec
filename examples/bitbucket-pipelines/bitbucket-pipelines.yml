@@ -1,7 +1,7 @@
 # Bitbucket Pipelines Security Scan Configuration
 # Add this to your bitbucket-pipelines.yml file
 
-image: node:18
+image: node:20
 
 pipelines:
   pull-requests:
@@ -65,7 +65,7 @@ pipelines:
             - node
           script:
             - npm install -g rnsec
-            - rnsec scan --md security-report.md --html security-report.html --json security-report.json || true
+            - rnsec scan --md security-report.md --html security-report.html --output security-report.json || true
           artifacts:
             - security-report.md
             - security-report.html

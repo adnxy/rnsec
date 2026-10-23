@@ -5,6 +5,163 @@ import { Severity, type Finding } from '../../types/findings.js';
 import { getLineNumber, extractSnippet } from '../../utils/stringUtils.js';
 import { RuleCategory } from '../../types/ruleTypes.js';
 
+/** Package name of an import specifier ("lodash/fp" -> "lodash", "@a/b/c" -> "@a/b"); null for relative/absolute paths */
+function packageNameOf(specifier: string): string | null {
+  if (!specifier || specifier.startsWith('.') || specifier.startsWith('/')) return null;
+  const parts = specifier.split('/');
+  return specifier.startsWith('@') ? parts.slice(0, 2).join('/') : parts[0];
+}
+
+/** Package names a JS/TS file imports, requires or dynamically imports */
+function collectImportedPackages(ast: any): Set<string> {
+  const found = new Set<string>();
+  const add = (spec: unknown) => {
+    if (typeof spec !== 'string') return;
+    const name = packageNameOf(spec);
+    if (name) found.add(name);
+  };
+  traverse(ast, {
+    ImportDeclaration(path: any) {
+      add(path.node.source?.value);
+    },
+    ExportNamedDeclaration(path: any) {
+      add(path.node.source?.value);
+    },
+    ExportAllDeclaration(path: any) {
+      add(path.node.source?.value);
+    },
+    CallExpression(path: any) {
+      const { node } = path;
+      const isRequire = node.callee.type === 'Identifier' && node.callee.name === 'require';
+      if ((isRequire || node.callee.type === 'Import') && node.arguments[0]?.type === 'StringLiteral') {
+        add(node.arguments[0].value);
+      }
+    },
+  });
+  return found;
+}
+
+/** A string literal or a template literal without interpolation */
+function isStaticString(node: any): boolean {
+  return !!node && (node.type === 'StringLiteral' || (node.type === 'TemplateLiteral' && node.expressions.length === 0));
+}
+
+/** eval("...") / new Function("...") where every argument is a constant string */
+function hasOnlyLiteralArguments(node: any): boolean {
+  return node.arguments.length > 0 && node.arguments.every((arg: any) => isStaticString(arg));
+}
+
+/** Split an identifier into lowercase words: "checkUrl" -> [check, url], "is_valid" -> [is, valid] */
+function identifierWords(name: string): string[] {
+  return name
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .split(/[^A-Za-z0-9]+/)
+    .filter(Boolean)
+    .map(w => w.toLowerCase());
+}
+
+/**
+ * Libraries (declared in package.json or imported by the entry file) that already perform
+ * root/jailbreak detection. react-native-device-info is deliberately NOT here: it only
+ * reports emulators, not rooted/jailbroken devices.
+ */
+const ROOT_JAILBREAK_DETECTION_LIBS = new Set([
+  'jail-monkey',
+  'jail-monkey-fork',
+  'react-native-jail-monkey',
+  '@freerasp/react-native',
+  'freerasp-react-native',
+  'expo-device',
+  'rn-root-detection',
+  'react-native-root-detection',
+  'react-native-root-check',
+  'react-native-root-beer',
+  'react-native-jailbreak-detect',
+  'jail-monkey-plus',
+  'react-native-ios-jailbreak-detection',
+  'react-native-ios-jailbreak-detector',
+  'react-native-device-integrity',
+  '@approov/react-native-approov',
+  'react-native-talsec',
+]);
+
+/** Libraries providing runtime integrity / attestation / tamper detection */
+const RUNTIME_INTEGRITY_LIBS = new Set([
+  '@freerasp/react-native',
+  'freerasp-react-native',
+  'react-native-talsec',
+  'jail-monkey',
+  'jail-monkey-fork',
+  'react-native-jail-monkey',
+  'react-native-play-integrity',
+  'react-native-google-play-integrity',
+  '@react-native-google-signin/play-integrity',
+  'react-native-app-attest',
+  '@expo/app-integrity',
+  'expo-app-integrity',
+  'react-native-device-check',
+  'react-native-safetynet',
+  'react-native-google-safetynet',
+  '@react-native-firebase/app-check',
+  '@approov/react-native-approov',
+  'react-native-device-integrity',
+]);
+
+/** Packages whose presence is a strong signal of a payments/banking/health/crypto-wallet app */
+const HIGH_RISK_DOMAIN_LIBS = new Set([
+  'stripe',
+  '@stripe/stripe-react-native',
+  '@stripe/stripe-js',
+  'react-native-plaid-link-sdk',
+  'plaid',
+  'react-native-iap',
+  'react-native-payments',
+  'react-native-google-pay',
+  '@paypal/react-native-paypal',
+  'react-native-paypal',
+  'braintree-web',
+  'react-native-braintree-dropin-ui',
+  '@adyen/react-native',
+  'ethers',
+  'web3',
+  '@solana/web3.js',
+  '@walletconnect/client',
+  '@walletconnect/web3-provider',
+  '@walletconnect/react-native-compat',
+  '@web3modal/ethers5-react-native',
+  'react-native-health',
+  'react-native-health-connect',
+  '@kingstinct/react-native-healthkit',
+  'react-native-google-fit',
+  'expo-health',
+]);
+
+const isEntryFile = (filePath: string, rootDir?: string): boolean => {
+  let rel = filePath.replace(/\\/g, '/');
+  if (rootDir) {
+    const root = rootDir.replace(/\\/g, '/').replace(/\/$/, '');
+    if (rel.startsWith(root + '/')) rel = rel.slice(root.length + 1);
+    return /^(src\/)?(index|App)\.(js|jsx|ts|tsx)$/.test(rel);
+  }
+  // No root known: basename only
+  return /(^|\/)(index|App)\.(js|jsx|ts|tsx)$/.test(rel);
+};
+
+/** Shared gate for the two "absence" rules: entry file of an app that signals a high-risk domain */
+function analyseAbsenceContext(context: RuleContext, protectiveLibs: Set<string>) {
+  if (!context.ast || !isEntryFile(context.filePath, context.project?.rootDir)) {
+    return { applicable: false, protectedByLib: false };
+  }
+  const imported = collectImportedPackages(context.ast);
+  const declared = context.project?.dependencies ?? new Set<string>();
+  const has = (set: Set<string>) =>
+    [...set].some(lib => declared.has(lib) || imported.has(lib));
+  return {
+    applicable: has(HIGH_RISK_DOMAIN_LIBS),
+    protectedByLib: has(protectiveLibs),
+  };
+}
+
 const javascriptEnabledBridgeRule: Rule = {
   id: 'JAVASCRIPT_ENABLED_BRIDGE',
   description: 'Native module exposed to JavaScript without proper input validation',
@@ -59,6 +216,14 @@ const javascriptEnabledBridgeRule: Rule = {
   },
 };
 
+/** Words that indicate a deep-link URL is being validated (matched against identifier words, never comments) */
+const DEEPLINK_VALIDATION_WORDS = new Set([
+  'validate', 'validated', 'validation', 'valid', 'sanitize', 'sanitized',
+  'whitelist', 'allowlist', 'allowed', 'trusted', 'verify', 'verified', 'check', 'safe',
+]);
+/** Reading these from a parsed URL means the code looks at scheme/host before acting */
+const URL_PART_PROPERTIES = new Set(['hostname', 'host', 'protocol', 'origin']);
+
 const insecureDeeplinkHandlerRule: Rule = {
   id: 'INSECURE_DEEPLINK_HANDLER',
   description: 'Deep link or URL scheme handled without validation',
@@ -71,41 +236,83 @@ const insecureDeeplinkHandlerRule: Rule = {
       return findings;
     }
 
+    const isLinkingCall = (callee: any, names: string[]) =>
+      callee.type === 'MemberExpression' &&
+      callee.object.type === 'Identifier' &&
+      callee.object.name === 'Linking' &&
+      callee.property.type === 'Identifier' &&
+      names.includes(callee.property.name);
+
+    const report = (node: any, confidence: 'high' | 'low') => {
+      const line = getLineNumber(context.fileContent, node.start || 0);
+      findings.push({
+        ruleId: 'INSECURE_DEEPLINK_HANDLER',
+        description: confidence === 'low'
+          ? 'Deep link handler could not be inspected (defined elsewhere) - verify it validates the URL'
+          : 'Deep link handled without URL validation',
+        severity: Severity.HIGH,
+        filePath: context.filePath,
+        line,
+        snippet: extractSnippet(context.fileContent, line),
+        suggestion: 'Validate deep link URLs against a whitelist of allowed schemes and paths before navigation',
+        ...(confidence === 'low' ? { confidence: 'low' as const } : {}),
+      });
+    };
+
+    /** Inspect a handler expression. Returns true when it validates, false when not, null when unknown */
+    const handlerValidates = (handlerPath: any): boolean | null => {
+      let target = handlerPath;
+      if (target.isIdentifier()) {
+        const binding = target.scope.getBinding(target.node.name);
+        if (!binding) return null;
+        const bp = binding.path;
+        if (bp.isFunctionDeclaration()) target = bp;
+        else if (bp.isVariableDeclarator() && bp.get('init').node &&
+                 (bp.get('init').isArrowFunctionExpression() || bp.get('init').isFunctionExpression())) {
+          target = bp.get('init');
+        } else return null;
+      }
+      if (!target.isFunction()) return null;
+      let validated = false;
+      target.traverse({
+        Identifier(p: any) {
+          if (identifierWords(p.node.name).some(w => DEEPLINK_VALIDATION_WORDS.has(w))) validated = true;
+        },
+        MemberExpression(p: any) {
+          const prop = p.node.property;
+          if (!p.node.computed && prop.type === 'Identifier' && URL_PART_PROPERTIES.has(prop.name)) validated = true;
+        },
+      });
+      // Parameters are Identifiers visited by the traversal only for nested nodes; check own name too
+      return validated;
+    };
+
     traverse(context.ast, {
       CallExpression(path: any) {
         const { node } = path;
-        
+
+        if (isLinkingCall(node.callee, ['addEventListener'])) {
+          const handler = path.get('arguments.1');
+          if (!handler || !handler.node) return;
+          const result = handlerValidates(handler);
+          if (result === null) report(node, 'low');
+          else if (!result) report(node, 'high');
+          return;
+        }
+
+        // Linking.getInitialURL().then(handler)
         if (
           node.callee.type === 'MemberExpression' &&
-          node.callee.object.type === 'Identifier' &&
-          node.callee.object.name === 'Linking' &&
           node.callee.property.type === 'Identifier' &&
-          (node.callee.property.name === 'addEventListener' || node.callee.property.name === 'getInitialURL')
+          node.callee.property.name === 'then' &&
+          node.callee.object.type === 'CallExpression' &&
+          isLinkingCall(node.callee.object.callee, ['getInitialURL'])
         ) {
-          const callbackArg = node.arguments[1] || node.arguments[0];
-          
-          if (callbackArg) {
-            const callbackCode = context.fileContent.substring(
-              callbackArg.start || 0,
-              Math.min(context.fileContent.length, (callbackArg.end || 0) + 200)
-            );
-            
-            const hasValidation = /validate|sanitize|whitelist|allowed|check|verify/i.test(callbackCode);
-            
-            if (!hasValidation) {
-              const line = getLineNumber(context.fileContent, node.start || 0);
-              
-              findings.push({
-                ruleId: 'INSECURE_DEEPLINK_HANDLER',
-                description: 'Deep link handled without URL validation',
-                severity: Severity.HIGH,
-                filePath: context.filePath,
-                line,
-                snippet: extractSnippet(context.fileContent, line),
-                suggestion: 'Validate deep link URLs against a whitelist of allowed schemes and paths before navigation',
-              });
-            }
-          }
+          const handler = path.get('arguments.0');
+          if (!handler || !handler.node) return;
+          const result = handlerValidates(handler);
+          if (result === null) report(node, 'low');
+          else if (!result) report(node, 'high');
         }
       },
     });
@@ -117,7 +324,7 @@ const insecureDeeplinkHandlerRule: Rule = {
 const screenshotProtectionMissingRule: Rule = {
   id: 'SCREENSHOT_PROTECTION_MISSING',
   description: 'Sensitive screen without screenshot/screen recording protection',
-  severity: Severity.LOW,
+  severity: Severity.MEDIUM,
   fileTypes: ['.js', '.jsx', '.ts', '.tsx'],
   apply: async (context: RuleContext): Promise<Finding[]> => {
     const findings: Finding[] = [];
@@ -305,6 +512,10 @@ const screenshotProtectionMissingRule: Rule = {
   },
 };
 
+/** Callee names/members that sanitize HTML */
+const HTML_SANITIZER_CALLEES = /^(DOMPurify\.sanitize|purify\.sanitize|sanitizeHtml|sanitize|xss|filterXSS|escapeHtml)$/;
+const HTML_SANITIZER_PACKAGES = new Set(['dompurify', 'isomorphic-dompurify', 'sanitize-html', 'xss', 'insane', 'escape-html']);
+
 const unsafeDangerouslySetInnerHtmlRule: Rule = {
   id: 'UNSAFE_DANGEROUSLY_SET_INNER_HTML',
   description: 'dangerouslySetInnerHTML used with potentially unsafe content',
@@ -317,6 +528,48 @@ const unsafeDangerouslySetInnerHtmlRule: Rule = {
       return findings;
     }
 
+    const sanitizerPackages = new Set<string>();
+    traverse(context.ast, {
+      ImportDeclaration(path: any) {
+        const name = packageNameOf(path.node.source.value);
+        if (name && HTML_SANITIZER_PACKAGES.has(name)) {
+          path.node.specifiers.forEach((sp: any) => sanitizerPackages.add(sp.local.name));
+        }
+      },
+    });
+
+    const calleeText = (callee: any): string | null => {
+      if (callee.type === 'Identifier') return callee.name;
+      if (callee.type === 'MemberExpression' && !callee.computed &&
+          callee.object.type === 'Identifier' && callee.property.type === 'Identifier') {
+        return `${callee.object.name}.${callee.property.name}`;
+      }
+      return null;
+    };
+
+    const isSanitizerCall = (node: any): boolean => {
+      if (!node || node.type !== 'CallExpression') return false;
+      const text = calleeText(node.callee);
+      if (!text) return false;
+      if (HTML_SANITIZER_CALLEES.test(text)) return true;
+      const root = text.split('.')[0];
+      return sanitizerPackages.has(root);
+    };
+
+    /** 'literal' | 'sanitized' | 'unknown' for the __html value expression */
+    const classify = (valuePath: any, depth = 0): 'literal' | 'sanitized' | 'unknown' => {
+      const node = valuePath.node;
+      if (isStaticString(node)) return 'literal';
+      if (isSanitizerCall(node)) return 'sanitized';
+      if (node.type === 'Identifier' && depth < 3) {
+        const binding = valuePath.scope.getBinding(node.name);
+        if (binding && binding.constant && binding.path.isVariableDeclarator() && binding.path.node.init) {
+          return classify(binding.path.get('init'), depth + 1);
+        }
+      }
+      return 'unknown';
+    };
+
     traverse(context.ast, {
       JSXAttribute(path: any) {
         const { node } = path;
@@ -326,15 +579,48 @@ const unsafeDangerouslySetInnerHtmlRule: Rule = {
           node.name.name === 'dangerouslySetInnerHTML'
         ) {
           if (node.value && node.value.type === 'JSXExpressionContainer') {
+            let verdict: 'literal' | 'sanitized' | 'unknown' = 'unknown';
+            const expr = path.get('value.expression');
+            if (expr.node.type === 'ObjectExpression') {
+              const htmlProp = expr.get('properties').find((pp: any) =>
+                pp.isObjectProperty() && !pp.node.computed &&
+                ((pp.node.key.type === 'Identifier' && pp.node.key.name === '__html') ||
+                 (pp.node.key.type === 'StringLiteral' && pp.node.key.value === '__html'))
+              );
+              if (htmlProp) verdict = classify(htmlProp.get('value'));
+            }
+
             const start = Math.max(0, (node.start || 0) - 200);
             const end = Math.min(context.fileContent.length, (node.end || 0) + 200);
-            const surroundingCode = context.fileContent.substring(start, end).toLowerCase();
-            
-            const hasSanitization = /sanitize|dompurify|xss|escape/i.test(surroundingCode);
-            
-            if (!hasSanitization) {
-              const line = getLineNumber(context.fileContent, node.start || 0);
-              
+            const nearbySanitizer = /sanitize|dompurify|xss|escape/i.test(context.fileContent.substring(start, end));
+
+            const line = getLineNumber(context.fileContent, node.start || 0);
+            if (verdict === 'literal' || verdict === 'sanitized') {
+              findings.push({
+                ruleId: 'UNSAFE_DANGEROUSLY_SET_INNER_HTML',
+                description: verdict === 'literal'
+                  ? 'dangerouslySetInnerHTML with a constant string - no injection path, but prefer plain components'
+                  : 'dangerouslySetInnerHTML with sanitized content - verify the sanitizer configuration',
+                severity: Severity.LOW,
+                confidence: 'medium',
+                filePath: context.filePath,
+                line,
+                snippet: extractSnippet(context.fileContent, line),
+                suggestion: 'Keep the sanitizer allow-list strict and avoid dangerouslySetInnerHTML where plain components work',
+              });
+            } else if (nearbySanitizer) {
+              // A sanitizer is mentioned nearby but we cannot prove it feeds __html
+              findings.push({
+                ruleId: 'UNSAFE_DANGEROUSLY_SET_INNER_HTML',
+                description: 'dangerouslySetInnerHTML - a sanitizer appears nearby but could not be linked to the rendered value',
+                severity: Severity.LOW,
+                confidence: 'low',
+                filePath: context.filePath,
+                line,
+                snippet: extractSnippet(context.fileContent, line),
+                suggestion: 'Pass the value through DOMPurify.sanitize (or similar) directly in the __html expression',
+              });
+            } else {
               findings.push({
                 ruleId: 'UNSAFE_DANGEROUSLY_SET_INNER_HTML',
                 description: 'dangerouslySetInnerHTML without HTML sanitization - XSS risk',
@@ -416,6 +702,22 @@ const evalUsageRule: Rule = {
       return findings;
     }
 
+    const report = (node: any, name: string) => {
+      // A constant string cannot carry attacker-controlled input
+      if (hasOnlyLiteralArguments(node)) return;
+      const line = getLineNumber(context.fileContent, node.start || 0);
+      
+      findings.push({
+        ruleId: 'EVAL_USAGE',
+        description: `Dangerous ${name}() usage detected - code injection risk`,
+        severity: Severity.HIGH,
+        filePath: context.filePath,
+        line,
+        snippet: extractSnippet(context.fileContent, line),
+        suggestion: 'Avoid eval() and Function() constructor. Use JSON.parse() for JSON data or refactor code',
+      });
+    };
+
     traverse(context.ast, {
       CallExpression(path: any) {
         const { node } = path;
@@ -424,17 +726,13 @@ const evalUsageRule: Rule = {
           node.callee.type === 'Identifier' &&
           (node.callee.name === 'eval' || node.callee.name === 'Function')
         ) {
-          const line = getLineNumber(context.fileContent, node.start || 0);
-          
-          findings.push({
-            ruleId: 'EVAL_USAGE',
-            description: `Dangerous ${node.callee.name}() usage detected - code injection risk`,
-            severity: Severity.HIGH,
-            filePath: context.filePath,
-            line,
-            snippet: extractSnippet(context.fileContent, line),
-            suggestion: 'Avoid eval() and Function() constructor. Use JSON.parse() for JSON data or refactor code',
-          });
+          report(node, node.callee.name);
+        }
+      },
+      NewExpression(path: any) {
+        const { node } = path;
+        if (node.callee.type === 'Identifier' && node.callee.name === 'Function') {
+          report(node, 'new Function');
         }
       },
     });
@@ -507,47 +805,32 @@ const obfuscatedEvalExecutionRule: Rule = {
 const rootJailbreakDetectionAbsentRule: Rule = {
   id: 'ROOT_JAILBREAK_DETECTION_ABSENT',
   description: 'Sensitive app without root/jailbreak detection',
-  severity: Severity.HIGH,
+  severity: Severity.LOW,
   fileTypes: ['.js', '.jsx', '.ts', '.tsx'],
   apply: async (context: RuleContext): Promise<Finding[]> => {
     const findings: Finding[] = [];
-    
-    if (!context.filePath.match(/App\.(tsx|ts|jsx|js)$/) && !context.filePath.includes('index.')) {
+
+    // Decided per project: only the app entry file, only for a high-risk domain
+    // (payments/banking/health/crypto wallet), and only without a detection library.
+    const { applicable, protectedByLib } = analyseAbsenceContext(context, ROOT_JAILBREAK_DETECTION_LIBS);
+    if (!applicable || protectedByLib) {
       return findings;
     }
 
-    const content = context.fileContent.toLowerCase();
-    
-    // Check if app handles sensitive data
-    const sensitiveIndicators = [
-      'payment', 'banking', 'financial', 'fintech', 'healthcare', 'health',
-      'medical', 'crypto', 'wallet', 'insurance', 'credit card', 'debit'
-    ];
-    
-    const isSensitiveApp = sensitiveIndicators.some(indicator => content.includes(indicator));
-    
-    if (!isSensitiveApp) {
+    // Hand-rolled checks in the entry file count too
+    if (/\b(jailmonkey|isJailBroken|isRooted|isJailbroken|jailbreakTest|rootDetection)\b/i.test(context.fileContent)) {
       return findings;
     }
 
-    // Check for root/jailbreak detection libraries
-    const hasRootDetection = content.includes('jailmonkey') ||
-                             content.includes('jail-monkey') ||
-                             content.includes('rootdetection') ||
-                             content.includes('isrooted') ||
-                             content.includes('isjailbroken') ||
-                             content.includes('jailbreaktest');
-
-    if (!hasRootDetection) {
-      findings.push({
-        ruleId: 'ROOT_JAILBREAK_DETECTION_ABSENT',
-        description: 'Sensitive app (banking/fintech/healthcare) without root/jailbreak detection',
-        severity: Severity.HIGH,
-        filePath: context.filePath,
-        line: 1,
-        suggestion: 'Implement root/jailbreak detection using jail-monkey or similar library. Warn users or restrict functionality on compromised devices.',
-      });
-    }
+    findings.push({
+      ruleId: 'ROOT_JAILBREAK_DETECTION_ABSENT',
+      description: 'Payments/banking/health/crypto-wallet app without a root/jailbreak detection library',
+      severity: Severity.LOW,
+      confidence: 'low',
+      filePath: context.filePath,
+      line: 1,
+      suggestion: 'Consider root/jailbreak detection (jail-monkey, freeRASP) and warn or restrict functionality on compromised devices. Detection is bypassable, so treat it as defence in depth.',
+    });
 
     return findings;
   },
@@ -556,51 +839,29 @@ const rootJailbreakDetectionAbsentRule: Rule = {
 const missingRuntimeIntegrityChecksRule: Rule = {
   id: 'MISSING_RUNTIME_INTEGRITY_CHECKS',
   description: 'No runtime integrity or tamper detection implemented',
-  severity: Severity.HIGH,
+  severity: Severity.LOW,
   fileTypes: ['.js', '.jsx', '.ts', '.tsx'],
   apply: async (context: RuleContext): Promise<Finding[]> => {
     const findings: Finding[] = [];
-    
-    if (!context.filePath.match(/App\.(tsx|ts|jsx|js)$/) && !context.filePath.includes('index.')) {
+
+    const { applicable, protectedByLib } = analyseAbsenceContext(context, RUNTIME_INTEGRITY_LIBS);
+    if (!applicable || protectedByLib) {
       return findings;
     }
 
-    const content = context.fileContent.toLowerCase();
-    
-    // Check if app handles sensitive operations
-    const sensitiveOperations = [
-      'payment', 'transaction', 'banking', 'fintech', 'crypto',
-      'authentication', 'biometric', 'securestore'
-    ];
-    
-    const hasSensitiveOps = sensitiveOperations.some(op => content.includes(op));
-    
-    if (!hasSensitiveOps) {
+    if (/playintegrity|safetynet|appattest|devicecheck|tamperdetection|checksignature|verifysignature/i.test(context.fileContent)) {
       return findings;
     }
 
-    // Check for integrity checks
-    const hasIntegrityChecks = 
-      content.includes('playintegrity') ||           // Google Play Integrity API
-      content.includes('safetynet') ||               // Legacy SafetyNet
-      content.includes('appattest') ||               // iOS App Attest
-      content.includes('devicecheck') ||             // iOS DeviceCheck
-      content.includes('tamperdetection') ||
-      content.includes('checksignature') ||
-      content.includes('verifysignature') ||
-      content.includes('checksum') ||
-      content.includes('bundleidentifier') && content.includes('verify');
-
-    if (!hasIntegrityChecks) {
-      findings.push({
-        ruleId: 'MISSING_RUNTIME_INTEGRITY_CHECKS',
-        description: 'Sensitive app without runtime integrity or tamper detection',
-        severity: Severity.MEDIUM,
-        filePath: context.filePath,
-        line: 1,
-        suggestion: 'Implement runtime integrity checks: Play Integrity API (Android), App Attest (iOS), or signature verification to detect tampering.',
-      });
-    }
+    findings.push({
+      ruleId: 'MISSING_RUNTIME_INTEGRITY_CHECKS',
+      description: 'Payments/banking/health/crypto-wallet app without runtime integrity or tamper detection',
+      severity: Severity.LOW,
+      confidence: 'low',
+      filePath: context.filePath,
+      line: 1,
+      suggestion: 'Consider Play Integrity API (Android), App Attest (iOS) or freeRASP to detect tampering, and verify attestation on your backend.',
+    });
 
     return findings;
   },
@@ -608,7 +869,7 @@ const missingRuntimeIntegrityChecksRule: Rule = {
 
 const insecureDeserializationRule: Rule = {
   id: 'INSECURE_DESERIALIZATION',
-  description: 'Unsafe deserialization of untrusted data',
+  description: 'Unsafe deserialization of untrusted data (eval/Function on dynamic input)',
   severity: Severity.HIGH,
   fileTypes: ['.js', '.jsx', '.ts', '.tsx'],
   apply: async (context: RuleContext): Promise<Finding[]> => {
@@ -622,57 +883,14 @@ const insecureDeserializationRule: Rule = {
       CallExpression(path: any) {
         const { node } = path;
         
-        // Check for JSON.parse with potentially untrusted input
-        if (
-          node.callee.type === 'MemberExpression' &&
-          node.callee.object.name === 'JSON' &&
-          node.callee.property.name === 'parse'
-        ) {
-          const arg = node.arguments[0];
-          
-          // Check if the argument comes from external sources
-          const surroundingCode = context.fileContent.substring(
-            Math.max(0, (node.start || 0) - 300),
-            Math.min(context.fileContent.length, (node.end || 0) + 100)
-          ).toLowerCase();
-          
-          const isUntrustedSource = 
-            surroundingCode.includes('response') ||
-            surroundingCode.includes('request') ||
-            surroundingCode.includes('fetch') ||
-            surroundingCode.includes('axios') ||
-            surroundingCode.includes('api') ||
-            surroundingCode.includes('url') ||
-            surroundingCode.includes('params') ||
-            surroundingCode.includes('query');
-          
-          const hasValidation = 
-            surroundingCode.includes('validate') ||
-            surroundingCode.includes('sanitize') ||
-            surroundingCode.includes('schema') ||
-            surroundingCode.includes('zod') ||
-            surroundingCode.includes('yup') ||
-            surroundingCode.includes('joi');
-          
-          if (isUntrustedSource && !hasValidation) {
-            const line = getLineNumber(context.fileContent, node.start || 0);
-            
-            findings.push({
-              ruleId: 'INSECURE_DESERIALIZATION',
-              description: 'JSON.parse() on potentially untrusted data without validation',
-              severity: Severity.MEDIUM,
-              filePath: context.filePath,
-              line,
-              snippet: extractSnippet(context.fileContent, line),
-              suggestion: 'Validate JSON structure and data types before parsing untrusted input. Use schema validation libraries like Zod or Yup.',
-            });
-          }
-        }
-        
+        // JSON.parse is not reported: it cannot execute code, and a keyword-near-the-call heuristic
+        // ("api", "url", "response") fired on virtually every parse of a network response.
+
         // Check for eval-like deserialization
         if (
           node.callee.type === 'Identifier' &&
-          (node.callee.name === 'eval' || node.callee.name === 'Function')
+          (node.callee.name === 'eval' || node.callee.name === 'Function') &&
+          !hasOnlyLiteralArguments(node)
         ) {
           const line = getLineNumber(context.fileContent, node.start || 0);
           
@@ -693,6 +911,19 @@ const insecureDeserializationRule: Rule = {
   },
 };
 
+/** Risky SDKs, matched against package names (never against file text) */
+const RISKY_SDKS: Array<{ name: string; pattern: RegExp; risk: string }> = [
+  { name: 'smartlook', pattern: /^(smartlook-client|react-native-smartlook.*|@smartlook\/.+)$/, risk: 'Session replay - records user interactions including sensitive input' },
+  { name: 'hotjar', pattern: /^(@hotjar\/.+|react-native-hotjar.*)$/, risk: 'Session recording and heatmaps - may capture sensitive data' },
+  { name: 'fullstory', pattern: /^(@fullstory\/.+|react-native-fullstory.*)$/, risk: 'Session replay - captures all user interactions' },
+  { name: 'logrocket', pattern: /^(logrocket|logrocket-.+|@logrocket\/.+)$/, risk: 'Session replay with console logs - may expose sensitive data' },
+  { name: 'mouseflow', pattern: /^(mouseflow.*|react-native-mouseflow.*)$/, risk: 'Session replay and form analytics' },
+  { name: 'crazyegg', pattern: /^(crazyegg.*|react-native-crazyegg.*)$/, risk: 'Heatmaps and session recording' },
+  { name: 'appsflyer', pattern: /^(react-native-appsflyer|appsflyer-.+|@appsflyer\/.+)$/, risk: 'Attribution tracking - extensive data collection' },
+  { name: 'adjust', pattern: /^(react-native-adjust|@adjust\/.+|adjust-.+-sdk)$/, risk: 'Mobile attribution - tracks user behavior' },
+  { name: 'segment', pattern: /^(@segment\/.+|analytics-react-native|react-native-segment.*)$/, risk: 'Analytics aggregator - forwards data to multiple services' },
+];
+
 const thirdPartySdkRiskRule: Rule = {
   id: 'THIRD_PARTY_SDK_RISK',
   description: 'Potentially risky third-party SDK detected',
@@ -700,45 +931,52 @@ const thirdPartySdkRiskRule: Rule = {
   fileTypes: ['.js', '.jsx', '.ts', '.tsx', '.json'],
   apply: async (context: RuleContext): Promise<Finding[]> => {
     const findings: Finding[] = [];
-    
-    const content = context.fileContent.toLowerCase();
-    
-    // Check if this is a sensitive app
-    const isSensitiveApp = 
-      content.includes('payment') ||
-      content.includes('banking') ||
-      content.includes('healthcare') ||
-      content.includes('medical') ||
-      content.includes('financial');
 
-    if (!isSensitiveApp && !context.filePath.includes('package.json')) {
+    const make = (sdk: { name: string; risk: string }, line: number): Finding => ({
+      ruleId: 'THIRD_PARTY_SDK_RISK',
+      description: `Risky SDK detected: ${sdk.name} - ${sdk.risk}`,
+      severity: Severity.LOW,
+      confidence: 'medium',
+      filePath: context.filePath,
+      line,
+      suggestion: `Review ${sdk.name} usage in sensitive app. Ensure it doesn't capture/transmit sensitive user data. Consider alternatives or strict configuration.`,
+    });
+
+    // package.json: report each declared SDK once, at its declaration
+    if (context.config && context.filePath.endsWith('package.json')) {
+      const declared = new Set<string>();
+      for (const section of ['dependencies', 'optionalDependencies', 'peerDependencies']) {
+        const deps = context.config[section];
+        if (deps && typeof deps === 'object') Object.keys(deps).forEach(d => declared.add(d));
+      }
+      const lines = context.fileContent.split('\n');
+      const reported = new Set<string>(); // one finding per SDK even if it ships several packages
+      for (const pkg of declared) {
+        const sdk = RISKY_SDKS.find(s => s.pattern.test(pkg));
+        if (!sdk || reported.has(sdk.name)) continue;
+        reported.add(sdk.name);
+        const idx = lines.findIndex(l => l.includes(`"${pkg}"`));
+        findings.push(make(sdk, idx === -1 ? 1 : idx + 1));
+      }
       return findings;
     }
 
-    // Risky SDKs for sensitive apps
-    const riskySDKs = [
-      { name: 'smartlook', risk: 'Session replay - records user interactions including sensitive input' },
-      { name: 'hotjar', risk: 'Session recording and heatmaps - may capture sensitive data' },
-      { name: 'fullstory', risk: 'Session replay - captures all user interactions' },
-      { name: 'logrocket', risk: 'Session replay with console logs - may expose sensitive data' },
-      { name: 'mouseflow', risk: 'Session replay and form analytics' },
-      { name: 'crazyegg', risk: 'Heatmaps and session recording' },
-      { name: 'appsflyer', risk: 'Attribution tracking - extensive data collection' },
-      { name: 'adjust', risk: 'Mobile attribution - tracks user behavior' },
-      { name: 'segment', risk: 'Analytics aggregator - forwards data to multiple services' },
-    ];
-
-    for (const { name, risk } of riskySDKs) {
-      if (content.includes(name)) {
-        findings.push({
-          ruleId: 'THIRD_PARTY_SDK_RISK',
-          description: `Risky SDK detected in sensitive app: ${name} - ${risk}`,
-          severity: Severity.LOW,
-          filePath: context.filePath,
-          line: 1,
-          suggestion: `Review ${name} usage in sensitive app. Ensure it doesn't capture/transmit sensitive user data. Consider alternatives or strict configuration.`,
-        });
-      }
+    // Source files: fallback for SDKs not declared in the root package.json (monorepo packages,
+    // no manifest). Only when the file also talks about a sensitive domain.
+    if (!context.ast) {
+      return findings;
+    }
+    if (!/\b(payments?|banking|healthcare|medical|financial)\b/i.test(context.fileContent)) {
+      return findings;
+    }
+    const declaredRoot = context.project?.dependencies ?? new Set<string>();
+    const reported = new Set<string>();
+    for (const pkg of collectImportedPackages(context.ast)) {
+      if (declaredRoot.has(pkg)) continue; // reported on package.json instead
+      const sdk = RISKY_SDKS.find(s => s.pattern.test(pkg));
+      if (!sdk || reported.has(sdk.name)) continue;
+      reported.add(sdk.name);
+      findings.push(make(sdk, 1));
     }
 
     return findings;
@@ -1007,10 +1245,9 @@ const expoAuthSessionNoPkceRule: Rule = {
     traverse(context.ast, {
       ImportDeclaration(path: any) {
         const { node } = path;
-        if (node.source && node.source.value) {
-          if (node.source.value === 'expo-auth-session' || node.source.value === 'expo-auth-session/providers/google') {
-            hasAuthSessionImport = true;
-          }
+        const source = node.source?.value;
+        if (typeof source === 'string' && (source === 'expo-auth-session' || source.startsWith('expo-auth-session/'))) {
+          hasAuthSessionImport = true;
         }
       },
     });
@@ -1019,43 +1256,28 @@ const expoAuthSessionNoPkceRule: Rule = {
       return findings;
     }
 
+    // Any `usePKCE: false` option in a file that uses expo-auth-session (useAuthRequest, startAsync,
+    // new AuthRequest, a config object passed on later). Reported on the property's own line.
     traverse(context.ast, {
-      CallExpression(path: any) {
+      ObjectProperty(path: any) {
         const { node } = path;
-
-        // Check for useAuthRequest or AuthSession.startAsync without PKCE
         if (
-          node.callee.type === 'Identifier' &&
-          (node.callee.name === 'useAuthRequest' || node.callee.name === 'startAsync')
+          !node.computed &&
+          node.key &&
+          (node.key.name === 'usePKCE' || node.key.value === 'usePKCE') &&
+          node.value && node.value.type === 'BooleanLiteral' && node.value.value === false
         ) {
-          const configArg = node.arguments[0];
+          const line = getLineNumber(context.fileContent, node.start || 0);
 
-          if (configArg && configArg.type === 'ObjectExpression') {
-            const hasUsePKCE = configArg.properties.some((prop: any) =>
-              prop.key && (prop.key.name === 'usePKCE' || prop.key.value === 'usePKCE')
-            );
-
-            // Check if usePKCE is explicitly set to false
-            const pkceDisabled = configArg.properties.some((prop: any) =>
-              prop.key &&
-              (prop.key.name === 'usePKCE' || prop.key.value === 'usePKCE') &&
-              prop.value && prop.value.type === 'BooleanLiteral' && prop.value.value === false
-            );
-
-            if (pkceDisabled) {
-              const line = getLineNumber(context.fileContent, node.start || 0);
-
-              findings.push({
-                ruleId: 'EXPO_AUTH_SESSION_NO_PKCE',
-                description: 'AuthSession with PKCE explicitly disabled - vulnerable to authorization code interception',
-                severity: Severity.HIGH,
-                filePath: context.filePath,
-                line,
-                snippet: extractSnippet(context.fileContent, line),
-                suggestion: 'Enable PKCE (usePKCE: true) for OAuth flows. PKCE prevents authorization code interception attacks on mobile apps.',
-              });
-            }
-          }
+          findings.push({
+            ruleId: 'EXPO_AUTH_SESSION_NO_PKCE',
+            description: 'AuthSession with PKCE explicitly disabled - vulnerable to authorization code interception',
+            severity: Severity.HIGH,
+            filePath: context.filePath,
+            line,
+            snippet: extractSnippet(context.fileContent, line),
+            suggestion: 'Enable PKCE (usePKCE: true) for OAuth flows. PKCE prevents authorization code interception attacks on mobile apps.',
+          });
         }
       },
     });

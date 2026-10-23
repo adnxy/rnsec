@@ -1,0 +1,7 @@
+{
+  "name": "lifecycle-safe",
+  "scripts": {
+    "preinstall": "npx only-allow pnpm",
+    "postinstall": "patch-package || true"
+  }
+}

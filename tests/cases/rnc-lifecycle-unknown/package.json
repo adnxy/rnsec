@@ -1,0 +1,6 @@
+{
+  "name": "lifecycle-unknown",
+  "scripts": {
+    "postinstall": "./setup-things --quiet || true"
+  }
+}

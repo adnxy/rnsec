@@ -1,0 +1,486 @@
+{
+  "secure-app": {
+    "findings": [
+      {
+        "ruleId": "NO_REQUEST_TIMEOUT",
+        "file": "App.tsx",
+        "line": 19,
+        "severity": "LOW",
+        "confidence": "medium"
+      },
+      {
+        "ruleId": "MISSING_SECURITY_HEADERS",
+        "file": "App.tsx",
+        "line": 70,
+        "severity": "LOW",
+        "confidence": null
+      },
+      {
+        "ruleId": "NO_REQUEST_TIMEOUT",
+        "file": "secureAuth.tsx",
+        "line": 7,
+        "severity": "LOW",
+        "confidence": "medium"
+      }
+    ],
+    "exitCode": 0
+  },
+  "vulnerable-app": {
+    "findings": [
+      {
+        "ruleId": "IOS_MISSING_APP_SNAPSHOT_PROTECTION",
+        "file": "App.tsx",
+        "line": 1,
+        "severity": "LOW",
+        "confidence": null
+      },
+      {
+        "ruleId": "HARDCODED_SECRETS",
+        "file": "App.tsx",
+        "line": 12,
+        "severity": "HIGH",
+        "confidence": null
+      },
+      {
+        "ruleId": "HARDCODED_SECRETS",
+        "file": "App.tsx",
+        "line": 15,
+        "severity": "HIGH",
+        "confidence": null
+      },
+      {
+        "ruleId": "API_KEY_EXPOSED",
+        "file": "App.tsx",
+        "line": 23,
+        "severity": "LOW",
+        "confidence": "medium"
+      },
+      {
+        "ruleId": "HARDCODED_SECRETS",
+        "file": "App.tsx",
+        "line": 24,
+        "severity": "HIGH",
+        "confidence": "medium"
+      },
+      {
+        "ruleId": "MMKV_NO_ENCRYPTION",
+        "file": "App.tsx",
+        "line": 32,
+        "severity": "HIGH",
+        "confidence": null
+      },
+      {
+        "ruleId": "ASYNCSTORAGE_SENSITIVE_KEY",
+        "file": "App.tsx",
+        "line": 35,
+        "severity": "HIGH",
+        "confidence": null
+      },
+      {
+        "ruleId": "ASYNCSTORAGE_SENSITIVE_KEY",
+        "file": "App.tsx",
+        "line": 36,
+        "severity": "HIGH",
+        "confidence": null
+      },
+      {
+        "ruleId": "ASYNCSTORAGE_SENSITIVE_KEY",
+        "file": "App.tsx",
+        "line": 37,
+        "severity": "HIGH",
+        "confidence": null
+      },
+      {
+        "ruleId": "JWT_NO_EXPIRY_CHECK",
+        "file": "App.tsx",
+        "line": 42,
+        "severity": "MEDIUM",
+        "confidence": "medium"
+      },
+      {
+        "ruleId": "INSECURE_RANDOM",
+        "file": "App.tsx",
+        "line": 49,
+        "severity": "HIGH",
+        "confidence": null
+      },
+      {
+        "ruleId": "INSECURE_RANDOM",
+        "file": "App.tsx",
+        "line": 50,
+        "severity": "HIGH",
+        "confidence": null
+      },
+      {
+        "ruleId": "WEAK_HASH_ALGORITHM",
+        "file": "App.tsx",
+        "line": 56,
+        "severity": "HIGH",
+        "confidence": null
+      },
+      {
+        "ruleId": "JAVASCRIPT_ENABLED_BRIDGE",
+        "file": "App.tsx",
+        "line": 62,
+        "severity": "HIGH",
+        "confidence": null
+      },
+      {
+        "ruleId": "INSECURE_DEEPLINK_HANDLER",
+        "file": "App.tsx",
+        "line": 67,
+        "severity": "HIGH",
+        "confidence": null
+      },
+      {
+        "ruleId": "INSECURE_LINKING_OPEN",
+        "file": "App.tsx",
+        "line": 76,
+        "severity": "HIGH",
+        "confidence": null
+      },
+      {
+        "ruleId": "SENSITIVE_NAVIGATION_PARAMS",
+        "file": "App.tsx",
+        "line": 81,
+        "severity": "MEDIUM",
+        "confidence": null
+      },
+      {
+        "ruleId": "EXPO_AUTH_SESSION_NO_PKCE",
+        "file": "App.tsx",
+        "line": 87,
+        "severity": "HIGH",
+        "confidence": null
+      },
+      {
+        "ruleId": "INSECURE_WEBSOCKET",
+        "file": "App.tsx",
+        "line": 92,
+        "severity": "MEDIUM",
+        "confidence": null
+      },
+      {
+        "ruleId": "CUSTOM_CRYPTO_IMPLEMENTATION",
+        "file": "App.tsx",
+        "line": 98,
+        "severity": "HIGH",
+        "confidence": null
+      },
+      {
+        "ruleId": "NO_REQUEST_TIMEOUT",
+        "file": "App.tsx",
+        "line": 109,
+        "severity": "LOW",
+        "confidence": "medium"
+      },
+      {
+        "ruleId": "INSECURE_HTTP_URL",
+        "file": "App.tsx",
+        "line": 134,
+        "severity": "MEDIUM",
+        "confidence": null
+      },
+      {
+        "ruleId": "NO_REQUEST_TIMEOUT",
+        "file": "App.tsx",
+        "line": 134,
+        "severity": "LOW",
+        "confidence": "medium"
+      },
+      {
+        "ruleId": "SENSITIVE_LOGGING",
+        "file": "App.tsx",
+        "line": 138,
+        "severity": "MEDIUM",
+        "confidence": null
+      },
+      {
+        "ruleId": "SENSITIVE_LOGGING",
+        "file": "App.tsx",
+        "line": 139,
+        "severity": "MEDIUM",
+        "confidence": null
+      },
+      {
+        "ruleId": "SENSITIVE_LOGGING",
+        "file": "App.tsx",
+        "line": 140,
+        "severity": "MEDIUM",
+        "confidence": null
+      },
+      {
+        "ruleId": "INSECURE_HTTP_URL",
+        "file": "App.tsx",
+        "line": 145,
+        "severity": "MEDIUM",
+        "confidence": null
+      },
+      {
+        "ruleId": "NO_REQUEST_TIMEOUT",
+        "file": "App.tsx",
+        "line": 148,
+        "severity": "LOW",
+        "confidence": "medium"
+      },
+      {
+        "ruleId": "INSECURE_HTTP_URL",
+        "file": "App.tsx",
+        "line": 149,
+        "severity": "MEDIUM",
+        "confidence": null
+      },
+      {
+        "ruleId": "TEXT_INPUT_NO_SECURE",
+        "file": "App.tsx",
+        "line": 158,
+        "severity": "MEDIUM",
+        "confidence": null
+      },
+      {
+        "ruleId": "TEXT_INPUT_NO_SECURE",
+        "file": "App.tsx",
+        "line": 164,
+        "severity": "MEDIUM",
+        "confidence": null
+      },
+      {
+        "ruleId": "INSECURE_WEBVIEW",
+        "file": "App.tsx",
+        "line": 184,
+        "severity": "HIGH",
+        "confidence": null
+      },
+      {
+        "ruleId": "MISSING_SECURITY_HEADERS",
+        "file": "App.tsx",
+        "line": 184,
+        "severity": "LOW",
+        "confidence": null
+      },
+      {
+        "ruleId": "WEBVIEW_UNVALIDATED_NAVIGATION",
+        "file": "App.tsx",
+        "line": 184,
+        "severity": "HIGH",
+        "confidence": null
+      },
+      {
+        "ruleId": "MISSING_SECURITY_HEADERS",
+        "file": "App.tsx",
+        "line": 191,
+        "severity": "LOW",
+        "confidence": null
+      },
+      {
+        "ruleId": "ANDROID_WEBVIEW_DEBUG_ENABLED",
+        "file": "App.tsx",
+        "line": 193,
+        "severity": "HIGH",
+        "confidence": null
+      },
+      {
+        "ruleId": "EXCESSIVE_PERMISSIONS",
+        "file": "android/AndroidManifest.xml",
+        "line": 6,
+        "severity": "LOW",
+        "confidence": "low"
+      },
+      {
+        "ruleId": "ANDROID_MISSING_NETWORK_SECURITY_CONFIG",
+        "file": "android/AndroidManifest.xml",
+        "line": 8,
+        "severity": "MEDIUM",
+        "confidence": null
+      },
+      {
+        "ruleId": "ANDROID_CLEARTEXT_ENABLED",
+        "file": "android/AndroidManifest.xml",
+        "line": 12,
+        "severity": "HIGH",
+        "confidence": null
+      },
+      {
+        "ruleId": "ANDROID_BACKUP_ALLOWED",
+        "file": "android/AndroidManifest.xml",
+        "line": 13,
+        "severity": "MEDIUM",
+        "confidence": null
+      },
+      {
+        "ruleId": "ANDROID_EXPORTED_COMPONENT",
+        "file": "android/AndroidManifest.xml",
+        "line": 25,
+        "severity": "HIGH",
+        "confidence": null
+      },
+      {
+        "ruleId": "ANDROID_TASK_AFFINITY_VULNERABILITY",
+        "file": "android/AndroidManifest.xml",
+        "line": 25,
+        "severity": "MEDIUM",
+        "confidence": null
+      },
+      {
+        "ruleId": "EXPO_UPDATES_INSECURE_URL",
+        "file": "app.json",
+        "line": null,
+        "severity": "HIGH",
+        "confidence": null
+      },
+      {
+        "ruleId": "EXPO_UPDATES_NO_CODE_SIGNING",
+        "file": "app.json",
+        "line": null,
+        "severity": "HIGH",
+        "confidence": null
+      },
+      {
+        "ruleId": "EXPO_INSECURE_PERMISSIONS",
+        "file": "app.json",
+        "line": 9,
+        "severity": "LOW",
+        "confidence": "low"
+      },
+      {
+        "ruleId": "EXPO_INSECURE_PERMISSIONS",
+        "file": "app.json",
+        "line": 10,
+        "severity": "LOW",
+        "confidence": "low"
+      },
+      {
+        "ruleId": "EXPO_INSECURE_PERMISSIONS",
+        "file": "app.json",
+        "line": 11,
+        "severity": "LOW",
+        "confidence": "low"
+      },
+      {
+        "ruleId": "EXPO_SENSITIVE_CONFIG_EXPOSED",
+        "file": "app.json",
+        "line": 23,
+        "severity": "HIGH",
+        "confidence": "medium"
+      },
+      {
+        "ruleId": "EXPO_SENSITIVE_CONFIG_EXPOSED",
+        "file": "app.json",
+        "line": 24,
+        "severity": "HIGH",
+        "confidence": "medium"
+      },
+      {
+        "ruleId": "MISSING_SESSION_TIMEOUT",
+        "file": "authService.tsx",
+        "line": 1,
+        "severity": "MEDIUM",
+        "confidence": null
+      },
+      {
+        "ruleId": "NO_REQUEST_TIMEOUT",
+        "file": "authService.tsx",
+        "line": 6,
+        "severity": "LOW",
+        "confidence": "medium"
+      },
+      {
+        "ruleId": "ASYNCSTORAGE_SENSITIVE_KEY",
+        "file": "authService.tsx",
+        "line": 14,
+        "severity": "HIGH",
+        "confidence": null
+      },
+      {
+        "ruleId": "JWT_NO_EXPIRY_CHECK",
+        "file": "authService.tsx",
+        "line": 21,
+        "severity": "MEDIUM",
+        "confidence": "medium"
+      },
+      {
+        "ruleId": "UNENCRYPTED_REALM_DATABASE",
+        "file": "database.tsx",
+        "line": 6,
+        "severity": "HIGH",
+        "confidence": null
+      },
+      {
+        "ruleId": "IOS_ATS_DISABLED",
+        "file": "ios/Info.plist",
+        "line": 23,
+        "severity": "HIGH",
+        "confidence": null
+      },
+      {
+        "ruleId": "PUSH_NOTIFICATION_SENSITIVE_DATA",
+        "file": "notifications.tsx",
+        "line": 8,
+        "severity": "MEDIUM",
+        "confidence": null
+      },
+      {
+        "ruleId": "ASYNCSTORAGE_SENSITIVE_KEY",
+        "file": "notifications.tsx",
+        "line": 13,
+        "severity": "HIGH",
+        "confidence": null
+      },
+      {
+        "ruleId": "IOS_INSECURE_PASTEBOARD_USAGE",
+        "file": "pasteboard.swift",
+        "line": 3,
+        "severity": "MEDIUM",
+        "confidence": null
+      },
+      {
+        "ruleId": "IOS_INSECURE_PASTEBOARD_USAGE",
+        "file": "pasteboardHelper.tsx",
+        "line": 3,
+        "severity": "MEDIUM",
+        "confidence": null
+      },
+      {
+        "ruleId": "UNENCRYPTED_SQLITE_DATABASE",
+        "file": "sqliteDb.tsx",
+        "line": 6,
+        "severity": "HIGH",
+        "confidence": null
+      },
+      {
+        "ruleId": "EXPO_SECURE_STORE_WEAK_OPTIONS",
+        "file": "storage.tsx",
+        "line": 12,
+        "severity": "HIGH",
+        "confidence": null
+      }
+    ],
+    "exitCode": 1
+  },
+  "supply-chain-test": {
+    "findings": [
+      {
+        "ruleId": "SUSPICIOUS_LIFECYCLE_SCRIPT",
+        "file": "package.json",
+        "line": 6,
+        "severity": "HIGH",
+        "confidence": null
+      },
+      {
+        "ruleId": "SUSPICIOUS_LIFECYCLE_SCRIPT",
+        "file": "package.json",
+        "line": 7,
+        "severity": "HIGH",
+        "confidence": null
+      },
+      {
+        "ruleId": "OBFUSCATED_EVAL_EXECUTION",
+        "file": "preinstall.js",
+        "line": 3,
+        "severity": "HIGH",
+        "confidence": null
+      }
+    ],
+    "exitCode": 1
+  }
+}

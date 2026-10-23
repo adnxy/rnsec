@@ -1,0 +1,5 @@
+{
+  // we accept http in this demo
+  "ignoredRules": ["INSECURE_HTTP_URL"],
+  "exclude": ["src/**/*.gen.ts", /* glob with comment markers inside a string above */],
+}

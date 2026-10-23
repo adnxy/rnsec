@@ -1,0 +1,12 @@
+{
+  "cli": { "version": ">= 5.0.0" },
+  "build": {
+    "production": {
+      "env": {
+        "API_URL": "https://api.example-corp.com",
+        "DB_PASSWORD": "fake-password-value",
+        "EXPO_PUBLIC_SIGNING_KEY": "fake-signing-value-1"
+      }
+    }
+  }
+}

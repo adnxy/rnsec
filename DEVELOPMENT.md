@@ -68,7 +68,23 @@ To unlink:
 npm unlink -g rnsec
 ```
 
-### 5. Lint and Type Check
+### 5. Run the Test Suite
+
+```bash
+npm test
+```
+
+`npm test` builds the project, then runs `node --test` over `tests/*.test.mjs`. Rule fixtures live in `tests/cases/` (one positive and one `-neg` near-miss per rule). `tests/examples-snapshot.test.mjs` compares scans of `examples/` with `tests/snapshots/examples.json`; after an intended change, regenerate it with:
+
+```bash
+UPDATE_SNAPSHOTS=1 npm test
+```
+
+The tests run `dist/index.js`. To test a private build without touching `dist/`, build with `npx tsc --outDir .build-x && cp src/core/template.html .build-x/core/template.html` and run `RNSEC_BIN=.build-x/index.js node --test tests/*.test.mjs`.
+
+`tests/docs-consistency.test.mjs` keeps the docs honest: the rule count in `README.md` and `package.json`, the README category table, the version in `package.json` / `src/constants.ts` / `CHANGELOG.md`, and the rule IDs named in the newest CHANGELOG section must all match the CLI.
+
+### 6. Lint and Type Check
 
 ```bash
 npm run lint
@@ -90,9 +106,10 @@ Choose the version bump type based on changes:
 
 Edit these files:
 
-1. `package.json`: Update `version` field
+1. `package.json` and `package-lock.json`: Update `version` field
 2. `src/constants.ts`: Update `VERSION` constant
 3. `CHANGELOG.md`: Add new version section with changes
+4. `README.md` and `package.json` description: Update the rule count if it changed (`rnsec rules` prints the total; `npm test` checks it)
 
 #### OR Use npm version command
 
@@ -341,6 +358,9 @@ git push origin v1.1.1
 
 ## Version History
 
+- v1.4.0 - 18 new rules (105 total), SARIF, baselines, `--fail-on`, `.gitignore` support, false-positive reduction
+- v1.3.0 - 20 new rules (87 total), Expo and React Native coverage
+- v1.2.0 - Supply chain rules (`SUSPICIOUS_LIFECYCLE_SCRIPT`, `OBFUSCATED_EVAL_EXECUTION`)
 - v1.1.0 - Major feature release (13 new rules, improved detection)
 - v1.0.1 - CI/CD fixes, documentation improvements  
 - v1.0.0 - Initial public release

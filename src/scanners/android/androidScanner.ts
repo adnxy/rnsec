@@ -5,6 +5,56 @@ import { RuleCategory } from '../../types/ruleTypes.js';
 import type { Rule, RuleContext, RuleGroup } from '../../types/ruleTypes.js';
 import { getLineNumber, extractSnippet } from '../../utils/stringUtils.js';
 
+/** Blank out XML comments (keeping offsets and newlines) so commented-out components are ignored */
+function stripXmlComments(xml: string): string {
+  return xml.replace(/<!--[\s\S]*?-->/g, m => m.replace(/[^\n]/g, ' '));
+}
+
+interface ManifestElement {
+  tag: string;
+  /** Offset of the opening `<` */
+  index: number;
+  /** Opening tag only, e.g. `<activity android:name=".Main">` */
+  openTag: string;
+  /** Opening tag through its closing tag (or just the opening tag when self-closing) */
+  text: string;
+}
+
+/** Extract components element by element, so a self-closing tag never swallows its neighbour */
+function extractElements(xml: string, tags: string[]): ManifestElement[] {
+  const elements: ManifestElement[] = [];
+  const opening = new RegExp(`<(${tags.join('|')})(?=[\\s>/])((?:"[^"]*"|'[^']*'|[^>"'])*)>`, 'g');
+  let m: RegExpExecArray | null;
+  while ((m = opening.exec(xml)) !== null) {
+    const openTag = m[0];
+    const selfClosing = openTag.endsWith('/>');
+    let end = m.index + openTag.length;
+    if (!selfClosing) {
+      const close = xml.indexOf(`</${m[1]}>`, end);
+      if (close !== -1) end = close + m[1].length + 3;
+    }
+    elements.push({ tag: m[1], index: m.index, openTag, text: xml.slice(m.index, end) });
+  }
+  return elements;
+}
+
+/** Value of an attribute in an opening tag, e.g. attrValue(tag, 'android:exported') */
+function attrValue(openTag: string, name: string): string | undefined {
+  const m = openTag.match(new RegExp(`(?:^|\\s)${name.replace(':', '\\:')}\\s*=\\s*(?:"([^"]*)"|'([^']*)')`));
+  return m ? (m[1] ?? m[2]) : undefined;
+}
+
+/** Line (1-based) of the first occurrence of `needle`, or undefined */
+function lineOf(xml: string, needle: string | RegExp): number | undefined {
+  const idx = typeof needle === 'string' ? xml.indexOf(needle) : xml.search(needle);
+  return idx === -1 ? undefined : getLineNumber(xml, idx);
+}
+
+/** The activity declares MAIN + LAUNCHER, i.e. it is the app icon entry point and must be exported */
+function isLauncherComponent(text: string): boolean {
+  return /android\.intent\.action\.MAIN/.test(text) && /android\.intent\.category\.LAUNCHER/.test(text);
+}
+
 const androidDebuggableRule: Rule = {
   id: 'ANDROID_DEBUGGABLE_ENABLED',
   description: 'android:debuggable="true" in production manifest',
@@ -23,6 +73,7 @@ const androidDebuggableRule: Rule = {
         description: 'Application is debuggable - allows memory dumps and code inspection',
         severity: Severity.HIGH,
         filePath: context.filePath,
+        line: lineOf(context.xmlContent, 'android:debuggable="true"'),
         suggestion: 'Remove android:debuggable="true" or ensure it\'s only set in debug builds. Debuggable apps expose sensitive data.',
       });
     }
@@ -43,8 +94,17 @@ const androidBackupAllowedRule: Rule = {
       return findings;
     }
 
-    const hasBackupEnabled = context.xmlContent.includes('android:allowBackup="true"');
-    const hasBackupFalse = context.xmlContent.includes('android:allowBackup="false"');
+    const xml = stripXmlComments(context.xmlContent);
+    const app = extractElements(xml, ['application'])[0];
+    const appTag = app?.openTag ?? xml;
+
+    const hasBackupEnabled = attrValue(appTag, 'android:allowBackup') === 'true';
+    const hasBackupFalse = attrValue(appTag, 'android:allowBackup') === 'false';
+    // fullBackupContent (API <= 30) / dataExtractionRules (API 31+) let the app exclude data from backups
+    const hasBackupRules =
+      attrValue(appTag, 'android:fullBackupContent') !== undefined &&
+      attrValue(appTag, 'android:fullBackupContent') !== 'false'
+      || attrValue(appTag, 'android:dataExtractionRules') !== undefined;
 
     const sensitiveIndicators = [
       'permission.CAMERA',
@@ -56,15 +116,29 @@ const androidBackupAllowedRule: Rule = {
     ];
 
     const hasSensitiveContent = sensitiveIndicators.some(indicator => 
-      context.xmlContent?.includes(indicator)
+      xml.includes(indicator)
     );
 
-    if (hasBackupEnabled && hasSensitiveContent) {
+    const appLine = app ? getLineNumber(xml, app.index) : undefined;
+    const backupLine = lineOf(xml, /android:allowBackup\s*=/) ?? appLine;
+
+    if (hasBackupEnabled && hasSensitiveContent && hasBackupRules) {
+      findings.push({
+        ruleId: 'ANDROID_BACKUP_ALLOWED',
+        description: 'android:allowBackup="true" with fullBackupContent/dataExtractionRules - verify the rules exclude sensitive data',
+        severity: Severity.LOW,
+        confidence: 'medium',
+        filePath: context.filePath,
+        line: backupLine,
+        suggestion: 'Check that the backup rules exclude tokens, databases and shared preferences holding sensitive data, or set android:allowBackup="false".',
+      });
+    } else if (hasBackupEnabled && hasSensitiveContent) {
       findings.push({
         ruleId: 'ANDROID_BACKUP_ALLOWED',
         description: 'Backup enabled for app with sensitive data - data can be extracted via ADB',
         severity: Severity.MEDIUM,
         filePath: context.filePath,
+        line: backupLine,
         suggestion: 'Set android:allowBackup="false" or implement android:fullBackupContent rules to exclude sensitive data.',
       });
     } else if (!hasBackupFalse && !hasBackupEnabled && hasSensitiveContent) {
@@ -72,7 +146,9 @@ const androidBackupAllowedRule: Rule = {
         ruleId: 'ANDROID_BACKUP_ALLOWED',
         description: 'Backup setting not specified for sensitive app (defaults to true)',
         severity: Severity.LOW,
+        ...(hasBackupRules ? { confidence: 'medium' as const } : {}),
         filePath: context.filePath,
+        line: appLine,
         suggestion: 'Explicitly set android:allowBackup="false" for apps handling sensitive data.',
       });
     }
@@ -93,29 +169,22 @@ const androidExportedComponentRule: Rule = {
       return findings;
     }
 
-    const componentTypes = ['activity', 'service', 'receiver', 'provider'];
+    const xml = stripXmlComments(context.xmlContent);
 
-    for (const componentType of componentTypes) {
-      const componentPattern = new RegExp(
-        `<${componentType}[^>]*android:exported="true"[^>]*>([\\s\\S]*?)</${componentType}>`,
-        'gi'
-      );
-      const matches = context.xmlContent.matchAll(componentPattern);
+    for (const el of extractElements(xml, ['activity-alias', 'activity', 'service', 'receiver', 'provider'])) {
+      if (attrValue(el.openTag, 'android:exported') !== 'true') continue;
+      // The launcher activity has to be exported
+      if (el.tag.startsWith('activity') && isLauncherComponent(el.text)) continue;
+      if (attrValue(el.openTag, 'android:permission') !== undefined) continue;
 
-      for (const match of matches) {
-        const componentContent = match[0];
-        const hasPermission = componentContent.includes('android:permission=');
-
-        if (!hasPermission) {
-          findings.push({
-            ruleId: 'ANDROID_EXPORTED_COMPONENT',
-            description: `Exported ${componentType} without permission protection - accessible by any app`,
-            severity: Severity.HIGH,
-            filePath: context.filePath,
-            suggestion: `Add android:permission attribute to exported ${componentType} or set android:exported="false" if external access is not needed.`,
-          });
-        }
-      }
+      findings.push({
+        ruleId: 'ANDROID_EXPORTED_COMPONENT',
+        description: `Exported ${el.tag} without permission protection - accessible by any app`,
+        severity: Severity.HIGH,
+        filePath: context.filePath,
+        line: getLineNumber(xml, el.index),
+        suggestion: `Add android:permission attribute to exported ${el.tag} or set android:exported="false" if external access is not needed.`,
+      });
     }
 
     return findings;
@@ -154,6 +223,7 @@ const androidIntentFilterTooPermissiveRule: Rule = {
               description: `Permissive intent filter with ${action}: ${risk}`,
               severity: Severity.MEDIUM,
               filePath: context.filePath,
+              line: getLineNumber(context.xmlContent, match.index ?? 0),
               suggestion: 'Validate all incoming intents and restrict with custom permissions if external access is not required.',
             });
           }
@@ -177,14 +247,14 @@ const androidUnprotectedBroadcastReceiverRule: Rule = {
       return findings;
     }
 
-    const receiverPattern = /<receiver[^>]*>[\s\S]*?<\/receiver>/gi;
-    const matches = context.xmlContent.matchAll(receiverPattern);
+    const xml = stripXmlComments(context.xmlContent);
 
-    for (const match of matches) {
-      const receiverContent = match[0];
-      const hasPermission = receiverContent.includes('android:permission=');
-      const isExported = receiverContent.includes('android:exported="true"') ||
-                        receiverContent.includes('<intent-filter');
+    for (const receiver of extractElements(xml, ['receiver'])) {
+      const hasPermission = attrValue(receiver.openTag, 'android:permission') !== undefined;
+      const exportedAttr = attrValue(receiver.openTag, 'android:exported');
+      // An explicit exported="false" wins over the presence of an intent-filter
+      const isExported = exportedAttr === 'true' ||
+                        (exportedAttr === undefined && receiver.text.includes('<intent-filter'));
 
       if (isExported && !hasPermission) {
         findings.push({
@@ -192,6 +262,7 @@ const androidUnprotectedBroadcastReceiverRule: Rule = {
           description: 'Broadcast receiver is exported without permission - can be triggered by malicious apps',
           severity: Severity.HIGH,
           filePath: context.filePath,
+          line: getLineNumber(xml, receiver.index),
           suggestion: 'Add android:permission to protect receiver or set android:exported="false" for internal broadcasts.',
         });
       }
@@ -229,6 +300,7 @@ const androidContentProviderNoPermissionRule: Rule = {
           description: 'Exported content provider without permission protection - data accessible to all apps',
           severity: Severity.HIGH,
           filePath: context.filePath,
+          line: getLineNumber(context.xmlContent, match.index ?? 0),
           suggestion: 'Add android:readPermission, android:writePermission, or android:permission to protect the content provider.',
         });
       }
@@ -324,33 +396,30 @@ const excessivePermissionsRule: Rule = {
       return findings;
     }
 
-    // Extract declared permissions
-    const permissionPattern = /<uses-permission\s+android:name="([^"]+)"\s*\/>/gi;
-    const matches = [...context.xmlContent.matchAll(permissionPattern)];
-    
-    if (matches.length === 0) {
-      return findings;
-    }
+    const xml = stripXmlComments(context.xmlContent);
 
-    // Common permission keywords to search for in code
+    // Common permission keywords to search for in code (matched as whole `_`-separated words)
     const permissionChecks = [
       'CAMERA', 'LOCATION', 'CONTACTS', 'MICROPHONE', 'STORAGE',
       'READ_PHONE_STATE', 'CALL_PHONE', 'SMS', 'BLUETOOTH'
     ];
 
     const unusedPermissions: string[] = [];
-    
-    for (const match of matches) {
-      const permissionName = match[1];
+    let firstLine: number | undefined;
+
+    for (const el of extractElements(xml, ['uses-permission', 'uses-permission-sdk-23'])) {
+      const permissionName = attrValue(el.openTag, 'android:name');
+      if (!permissionName) continue;
+      // `tools:node="remove"` strips a permission that a library would otherwise merge in
+      if (attrValue(el.openTag, 'tools:node') === 'remove') continue;
+
       const permissionShortName = permissionName.split('.').pop() || permissionName;
-      
-      // Check if permission is commonly excessive
-      const isCommonlyExcessive = permissionChecks.some(check => 
-        permissionShortName.includes(check)
-      );
-      
+      const padded = `_${permissionShortName}_`;
+      const isCommonlyExcessive = permissionChecks.some(check => padded.includes(`_${check}_`));
+
       if (isCommonlyExcessive) {
         unusedPermissions.push(permissionName);
+        firstLine ??= getLineNumber(xml, el.index);
       }
     }
 
@@ -359,7 +428,9 @@ const excessivePermissionsRule: Rule = {
         ruleId: 'EXCESSIVE_PERMISSIONS',
         description: `Potentially excessive permissions declared: ${unusedPermissions.slice(0, 3).join(', ')}${unusedPermissions.length > 3 ? '...' : ''}`,
         severity: Severity.LOW,
+        confidence: 'low',
         filePath: context.filePath,
+        line: firstLine,
         suggestion: 'Review declared permissions and remove those not actively used. Request permissions at runtime only when needed.',
       });
     }
@@ -380,21 +451,23 @@ const androidTaskAffinityVulnerabilityRule: Rule = {
       return findings;
     }
 
-    // Check for activities with custom taskAffinity
-    const activityPattern = /<activity[^>]*android:taskAffinity="([^"]*)"[^>]*>/gi;
-    const matches = context.xmlContent.matchAll(activityPattern);
+    // Check for activities with custom taskAffinity (commented-out activities are ignored)
+    const xml = stripXmlComments(context.xmlContent);
 
-    for (const match of matches) {
-      const affinity = match[1];
+    for (const activity of extractElements(xml, ['activity'])) {
+      const affinity = attrValue(activity.openTag, 'android:taskAffinity');
 
       // Empty taskAffinity is actually secure (prevents hijacking)
-      if (affinity === '') continue;
+      if (affinity === undefined || affinity === '') continue;
 
+      const line = getLineNumber(xml, activity.index);
       findings.push({
         ruleId: 'ANDROID_TASK_AFFINITY_VULNERABILITY',
         description: `Activity with custom taskAffinity="${affinity}" - vulnerable to StrandHogg task hijacking`,
         severity: Severity.MEDIUM,
         filePath: context.filePath,
+        line,
+        snippet: extractSnippet(context.xmlContent, line),
         suggestion: 'Set android:taskAffinity="" (empty string) on activities to prevent task hijacking attacks (StrandHogg). This prevents malicious apps from intercepting your activities.',
       });
     }
@@ -488,17 +561,22 @@ const androidMissingNetworkSecurityConfigRule: Rule = {
       return findings;
     }
 
-    const hasNetworkSecurityConfig = context.xmlContent.includes('android:networkSecurityConfig');
+    const xml = stripXmlComments(context.xmlContent);
+    const hasNetworkSecurityConfig = xml.includes('android:networkSecurityConfig');
 
     // Only flag if the app uses internet permission (is a networked app)
-    const hasInternetPermission = context.xmlContent.includes('android.permission.INTERNET');
+    const hasInternetPermission = xml.includes('android.permission.INTERNET');
 
     if (hasInternetPermission && !hasNetworkSecurityConfig) {
+      const app = extractElements(xml, ['application'])[0];
+      const line = app ? getLineNumber(xml, app.index) : undefined;
       findings.push({
         ruleId: 'ANDROID_MISSING_NETWORK_SECURITY_CONFIG',
         description: 'Network-enabled app without network_security_config.xml - missing certificate pinning and cleartext traffic control',
         severity: Severity.MEDIUM,
         filePath: context.filePath,
+        line,
+        snippet: line !== undefined ? extractSnippet(context.xmlContent, line) : undefined,
         suggestion: 'Add android:networkSecurityConfig="@xml/network_security_config" to <application> tag. Configure certificate pinning and restrict cleartext traffic.',
       });
     }

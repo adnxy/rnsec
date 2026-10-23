@@ -19,7 +19,7 @@ pool:
 steps:
   - task: NodeTool@0
     inputs:
-      versionSpec: '18.x'
+      versionSpec: '20.x'
     displayName: 'Install Node.js'
 
   - script: |
@@ -34,7 +34,7 @@ steps:
         rnsec scan --changed-files origin/$TARGET_BRANCH --md security-report.md --output security-report.json --silent || true
       else
         # Full scan for branch commits
-        rnsec scan --md security-report.md --html security-report.html --json security-report.json || true
+        rnsec scan --md security-report.md --html security-report.html --output security-report.json || true
       fi
     displayName: 'Run Security Scan'
     continueOnError: 'true'

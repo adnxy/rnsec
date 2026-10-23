@@ -1,6 +1,7 @@
 import { readFile } from 'fs/promises';
 import { resolve } from 'path';
 import type { RnsecConfig } from '../types/ruleTypes.js';
+import { parseJsonc } from './jsonc.js';
 
 export async function readFileContent(filePath: string): Promise<string> {
   try {
@@ -15,13 +16,21 @@ export async function readRnsecConfig(rootDir: string): Promise<RnsecConfig | nu
   const configPaths = ['.rnsec.json', '.rnsec.jsonc', '.rnsec.config.json'];
 
   for (const configPath of configPaths) {
+    const fullPath = resolve(rootDir, configPath);
+    let content: string;
     try {
-      const fullPath = resolve(rootDir, configPath);
-      const content = await readFile(fullPath, 'utf-8');
-      const config = JSON.parse(content);
-      return config as RnsecConfig;
+      content = await readFile(fullPath, 'utf-8');
+    } catch {
+      continue; // file does not exist: try the next candidate
+    }
+
+    try {
+      return parseJsonc<RnsecConfig>(content);
     } catch (error) {
-      // Continue to next config file
+      // Surface the problem instead of silently scanning without the user's config
+      console.warn(
+        `⚠️  Could not parse ${configPath}: ${error instanceof Error ? error.message : String(error)}. The file is being ignored.`
+      );
     }
   }
 

@@ -1,0 +1,10 @@
+{
+  "expo": {
+    "android": {
+      "permissions": [
+        "android.permission.CAMERA",
+        "android.permission.VIBRATE"
+      ]
+    }
+  }
+}

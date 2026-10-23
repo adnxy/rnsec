@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+  <base-config cleartextTrafficPermitted="false">
+    <trust-anchors>
+      <certificates src="system"/>
+    </trust-anchors>
+  </base-config>
+  <domain-config cleartextTrafficPermitted="true">
+    <domain includeSubdomains="true">localhost</domain>
+    <domain>10.0.2.2</domain>
+    <domain>192.168.1.20</domain>
+    <domain>dev.local</domain>
+  </domain-config>
+  <domain-config cleartextTrafficPermitted="false">
+    <domain>api.example.com</domain>
+    <pin-set expiration="2030-01-01">
+      <pin digest="SHA-256">7HIpactkIAq2Y49orFOOQKurWxmmSFZhBCoQYcRhJ3Y=</pin>
+    </pin-set>
+  </domain-config>
+  <debug-overrides cleartextTrafficPermitted="true">
+    <trust-anchors>
+      <certificates src="user" overridePins="true"/>
+    </trust-anchors>
+  </debug-overrides>
+</network-security-config>
