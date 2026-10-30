@@ -61,3 +61,33 @@ export function generateAnimationFrame() {
   r += Math.random();
   return r;
 }
+export function isTokenExpired(token) {
+  return Date.now() >= token.expiresAt - 5000;
+}
+export function checkSession(session) {
+  return isSessionStale(Date.now());
+}
+export function tokenAge(token) {
+  const age = Date.now() - token.issuedAt;
+  return age;
+}
+export function sessionElapsed(start) {
+  return Date.now() - start;
+}
+export function sessionStamp() {
+  return Date.now();
+}
+export function pickSessionVariant() {
+  return Math.random() < 0.5 ? 'a' : 'b';
+}
+export async function openSigner(deadline) {
+  const privateKey = await timeoutAfter(loadKey(), deadline - Date.now());
+  const sampleToken = await timeoutAfter(loadKey(), Math.random());
+  return [privateKey, sampleToken];
+}
+export function generateSessionToken() {
+  return Date.now().toString(36);
+}
+export function generateNonceValue() {
+  return BigInt(Math.floor(Math.random() * 1e6)).toString(16);
+}

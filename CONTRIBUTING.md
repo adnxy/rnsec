@@ -68,6 +68,10 @@ const yourRule: Rule = {
 
 Add a positive fixture (`tests/cases/cov-<rule>/`) and a near-miss (`tests/cases/cov-<rule>-neg/`) for every new rule, and keep the rule count in `README.md` and `package.json` in sync (`npm test` checks it). After changing the OWASP mapping run `npm run docs:owasp` and commit `docs/owasp-coverage.md`.
 
+### Precision-affecting rule changes
+
+If a change alters what a rule reports (new or tightened detection, role or path filters, confidence), run it against the benchmark in [docs/benchmark.md](docs/benchmark.md) and compare with the previous results (`bench/report.mjs --compare`). It must not lose a known true positive (`bench/check-tps.mjs`). State the before and after finding counts in the PR. Never build or execute the cloned benchmark apps.
+
 ## Code Style
 
 - TypeScript with strict mode

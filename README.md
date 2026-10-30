@@ -12,8 +12,9 @@ A zero-configuration security scanner for React Native and Expo applications tha
 
 ## What's new in 1.5.0
 
-- **OWASP mapping (`--owasp`)**: findings carry OWASP MASVS 2.1.0 / MASWE / MASTG / CWE references, and `--owasp` adds a MASVS coverage report (`failed`, `checked`, `not-applicable`, `not-assessed`) plus `rnsec rules --owasp`. 100 of the 106 rules are mapped. Static analysis does not establish MASVS compliance. See [OWASP MASVS / MASWE / MASTG](#owasp-masvs--maswe--mastg).
-- **`--format console|json|sarif`**, a **CRITICAL** severity (`--fail-on critical`), SARIF rules with MASVS/MASWE/CWE tags and help links, and `app.config.js` / `app.config.ts` support for three Expo rules. 106 rules in total.
+- **OWASP mapping (`--owasp`)**: findings carry OWASP MASVS 2.1.0 / MASWE / MASTG / CWE references, and `--owasp` adds a MASVS coverage report (`failed`, `checked`, `not-applicable`, `not-assessed`) plus `rnsec rules --owasp`. 103 of the 110 rules are mapped. Static analysis does not establish MASVS compliance. See [OWASP MASVS / MASWE / MASTG](#owasp-masvs--maswe--mastg).
+- **`--format console|json|sarif`**, a **CRITICAL** severity (`--fail-on critical`), SARIF rules with MASVS/MASWE/CWE tags and help links, and `app.config.js` / `app.config.ts` support for three Expo rules. 110 rules in total.
+- **Precision**: on a benchmark of 8 open-source apps, default-output findings dropped from 1460 to 524 (533 with the four new rules, which added 9 hand-verified true positives), and none of the 12 known true positives was lost. Hand-reviewed samples of removed findings were almost all correct removals, but the remaining findings are mostly "plausible, needs review", and **precision as a percentage is not established** (no labelled hold-out set). Generated bundles and scripts/tools/e2e/mocks are no longer scanned by code-pattern rules, and missing-protection checks are one project-level finding. See [docs/benchmark.md](docs/benchmark.md).
 - **Behaviour changes**: errors now exit `2` (findings still exit `1`), `rnsec scan -p <missing directory>` fails instead of scanning zero files, and findings are sorted deterministically. See the [CHANGELOG](CHANGELOG.md#150---2026-10-30).
 
 ---
@@ -400,7 +401,7 @@ rnsec maps its rules to the [OWASP Mobile Application Security](https://mas.owas
 | OWASP MASWE | 1.0.0 | The weakness behind each rule (`maswe`) |
 | OWASP MASTG | v2.0.0 + master@2eb0f70 | Static tests that match a rule's check (`mastg`); runtime tests are not listed |
 
-`CWE` ids are listed where one fits. 100 of the 106 rules are mapped; the six that have no sound MASVS fit are listed with their reason in the [coverage matrix](docs/owasp-coverage.md#unmapped-rules). The matrix ([`docs/owasp-coverage.md`](docs/owasp-coverage.md)) shows, for every MASVS control, which rules map to it and whether it is automated, heuristic only or manual/dynamic, plus a reference table of all rules with severity, platform, confidence and standard ids. It is generated from the mapping (`npm run docs:owasp`) and a test fails when it is stale.
+`CWE` ids are listed where one fits. 103 of the 110 rules are mapped; the seven that have no sound MASVS fit are listed with their reason in the [coverage matrix](docs/owasp-coverage.md#unmapped-rules). The matrix ([`docs/owasp-coverage.md`](docs/owasp-coverage.md)) shows, for every MASVS control, which rules map to it and whether it is automated, heuristic only or manual/dynamic, plus a reference table of all rules with severity, platform, confidence and standard ids. It is generated from the mapping (`npm run docs:owasp`) and a test fails when it is stale.
 
 ### Using `--owasp`
 
@@ -598,7 +599,7 @@ Use `<!-- rnsec-ignore: RULE_ID -->` in `AndroidManifest.xml`, `Info.plist` and 
 - Code that only runs in development builds (`if (__DEV__) { ... }`, `__DEV__ && ...`, `NODE_ENV !== 'production'` branches) is not reported. This is decided **per finding**, so a `__DEV__` check elsewhere in a file never hides a real issue.
 - Files that `.gitignore` excludes are not scanned (tracked files are always scanned). Use `--no-gitignore` or `"respectGitignore": false` to scan them too. Outside a git checkout this has no effect.
 - `.env`, `.npmrc`/`.yarnrc.yml`, `gradle.properties` and signing-key or service-account files are only checked when git tracks them. Ignored local copies are never reported, and templates such as `.env.example` are skipped. In a folder that is not a git checkout these files are not checked at all.
-- Findings carry a `confidence` (`high`, `medium`, `low`). Heuristic rules report lower confidence; use `--min-confidence medium` to see only the more certain ones.
+- Findings carry a `confidence` (`high`, `medium`, `low`). Heuristic rules report lower confidence (22 got explicit values in 1.5.0); use `--min-confidence medium` to see only the more certain ones.
 
 ### Excluding Files
 
@@ -616,7 +617,7 @@ Any pattern supported by `fast-glob` can be used, for more information see [Patt
 
 ## What It Detects
 
-rnsec identifies 106 different security issues across 13 categories:
+rnsec identifies 110 different security issues across 13 categories:
 
 **Common vulnerabilities found:**
 
@@ -639,23 +640,23 @@ const hash = MD5(password);
 
 ## Security Rules
 
-rnsec implements 106 security rules covering:
+rnsec implements 110 security rules covering:
 
 | Category | Rules | Description |
 |----------|-------|-------------|
 | **Storage** | 11 | AsyncStorage, MMKV, Realm and SQLite encryption, SQL injection, SecureStore options, file storage, clipboard, redux-persist |
-| **Network** | 7 | HTTP/WebSocket connections, request timeouts, TLS configuration, certificate pinning, disabled TLS validation, hardcoded IPs |
+| **Network** | 8 | HTTP/WebSocket connections, request timeouts, TLS configuration, certificate pinning, disabled TLS validation (JS and native Android/iOS code), hardcoded IPs |
 | **Authentication** | 8 | JWT handling and signing, OAuth flows and PKCE, biometrics, session timeout, secure text inputs |
-| **Secrets** | 6 | API key detection (provider-specific patterns), bundled env secrets, committed `.env` files, committed keystores and service-account files, basic-auth credentials |
+| **Secrets** | 7 | API key detection (provider-specific patterns), bundled env secrets, committed `.env` files, committed keystores and service-account files, basic-auth credentials, open Firebase security rules |
 | **Cryptography** | 5 | Weak hashes, weak ciphers/ECB mode/static IVs, hardcoded encryption keys, custom crypto, insecure randomness |
 | **Logging** | 2 | Sensitive data exposure in logs and error messages |
 | **React Native** | 13 | Native bridge, deep links, `Linking.openURL`, `eval()`, deserialization, navigation params, push notifications, screenshots, integrity checks, SDK risk |
 | **Debug** | 4 | Test credentials, debug endpoints, dev tools and network loggers in production |
 | **WebView** | 11 | JS injection, file access, origin whitelist, mixed content, navigation, postMessage, DOM storage, geolocation, caching, headers |
-| **Android** | 15 | Manifest security, exported components, backup, Keystore, `network_security_config.xml`, hardcoded signing passwords in Gradle |
+| **Android** | 16 | Manifest security, exported components, backup, Keystore, `network_security_config.xml`, hardcoded signing passwords in Gradle, FileProvider paths that expose whole directories |
 | **iOS** | 12 | App Transport Security, Keychain, pasteboard, file sharing, Info.plist, snapshot protection |
 | **Expo / EAS** | 7 | `app.json`/`app.config.*` settings and secrets, `eas.json` secrets, update URL and code signing, permissions |
-| **Supply chain** | 5 | Vulnerable/deprecated dependencies, suspicious lifecycle scripts, non-registry dependency sources, insecure `.npmrc`/`.yarnrc.yml` |
+| **Supply chain** | 6 | Vulnerable/deprecated dependencies, suspicious lifecycle scripts, non-registry dependency sources, insecure `.npmrc`/`.yarnrc.yml`, Gradle repositories over plain HTTP |
 
 Run `rnsec rules` to list every rule with its default severity (`rnsec rules --owasp` adds the MASVS and MASWE ids). Severity is the default: some rules report a lower or higher level depending on context, and `severityOverrides` can change it. The [OWASP coverage matrix](docs/owasp-coverage.md) lists every rule with its severity, platform, confidence and OWASP ids.
 
@@ -894,7 +895,7 @@ rnsec scan --path examples/secure-app
 One command with zero configuration required. Works out of the box with any React Native or Expo project.
 
 ### Comprehensive
-106 security rules for Android, iOS, React Native and Expo, 100 of them mapped to OWASP MASVS 2.1.0 controls and MASWE weaknesses (see the [coverage matrix](docs/owasp-coverage.md)). rnsec does not claim to cover the OWASP Mobile Top 10 or to verify MASVS compliance.
+110 security rules for Android, iOS, React Native and Expo, 103 of them mapped to OWASP MASVS 2.1.0 controls and MASWE weaknesses (see the [coverage matrix](docs/owasp-coverage.md)). rnsec does not claim to cover the OWASP Mobile Top 10 or to verify MASVS compliance.
 
 ### Fast
 Scans complete projects in seconds using efficient static analysis techniques.
@@ -918,6 +919,8 @@ rnsec uses static analysis to examine your codebase without executing it:
 4. **Rule Engine**: Applies security rules to AST nodes
 5. **Platform Scanners**: Checks Android and iOS configuration files
 6. **Reporter**: Generates HTML and JSON reports
+
+The rule engine skips generated bundles and non-app source for code-pattern rules, and counts rule exceptions and parse failures (`ruleErrors`, `parseFailures` in the JSON output). A dev-only benchmark harness in `bench/` measures finding volume on pinned open-source apps: see [docs/benchmark.md](docs/benchmark.md).
 
 Design note: the OWASP snapshot (`src/standards/owasp/snapshot.json`) and the rule mapping (`RULE_STANDARDS` in `src/standards/owasp/mappings.ts`) do not depend on how a finding was produced. A future analyzer for built binaries or running apps that emits `Finding`s whose `ruleId`s are listed in `RULE_STANDARDS` would reuse the same `--owasp` enrichment, MASVS coverage and SARIF output unchanged. Only static analysis of source, configuration and dependency metadata exists today.
 
@@ -986,6 +989,7 @@ rnsec is a static analysis tool with inherent limitations:
 - **Pattern-Based Detection**: May produce false positives or miss context-dependent issues
 - **Configuration Required**: Some security measures may be configured outside the codebase
 - **Native and Expo configuration**: `network_security_config.xml` is scanned directly, not resolved through the manifest's `android:networkSecurityConfig`; Expo config rules read only literal values in `app.config.js|ts`; CodePush code signing is not checked (Expo Updates signing is)
+- **Precision is not quantified**: the 1.5.0 reduction in findings was measured by volume and hand sampling on 8 apps ([docs/benchmark.md](docs/benchmark.md)), not by a labelled hold-out set. `HARDCODED_SECRETS` and `API_KEY_EXPOSED` are still noisy, and findings are not split into tiers (vulnerability, review, hardening).
 - **Git checkout needed for some checks**: `.env`, credential and registry-config files are only reported when git tracks them
 
 ## Security Best Practices

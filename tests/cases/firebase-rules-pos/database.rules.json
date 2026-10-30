@@ -1,0 +1,10 @@
+{
+  // open while prototyping
+  "rules": {
+    ".read": true,
+    ".write": "true",
+    "users": {
+      "$uid": { ".write": "auth.uid === $uid" }
+    }
+  }
+}

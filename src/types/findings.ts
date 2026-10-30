@@ -42,6 +42,13 @@ export interface Finding {
   standards?: FindingStandards;
 }
 
+/** A rule that threw while scanning; it was skipped for that file (`filePath` is empty for `finalize`) */
+export interface RuleError {
+  ruleId: string;
+  filePath: string;
+  message: string;
+}
+
 export interface ScanResult {
   findings: Finding[];
   scannedFiles: number;
@@ -52,6 +59,10 @@ export interface ScanResult {
   suppressedCount?: number;
   /** Findings dropped because their fingerprint is listed in the baseline */
   baselinedCount?: number;
+  /** Only present when a rule threw during the scan */
+  ruleErrors?: RuleError[];
+  /** Only present when a JS/TS file failed to parse (AST rules skipped it) */
+  parseFailures?: number;
   /** Only with `--owasp` */
   owasp?: OwaspReport;
 }

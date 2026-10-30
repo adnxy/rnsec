@@ -90,17 +90,31 @@ export function isGeneratedBundlePath(filePath: string): boolean {
   return GENERATED_BUNDLE_PATH.test(filePath.split(sep).join('/'));
 }
 
-/** Minified / generated JS by content: a line over 2000 characters, or a webpack / metro bundle banner near the top. */
+const LONG_LINE = 2000;
+const SOURCE_MAP_COMMENT = /\/\/[#@]\s*sourceMappingURL=/;
+
+/**
+ * Minified / generated JS by content. A webpack / metro / browserify banner near the top is enough. A long line alone is
+ * not (a component can inline a base64 image or an HTML page): a line over 2000 characters must be backed by a second
+ * minification signal, a trailing sourceMappingURL, a very low newline density (average line over 200 characters), or
+ * several long lines.
+ */
 export function isGeneratedBundleContent(content: string): boolean {
   if (BUNDLE_BANNER.test(content.slice(0, 4096))) return true;
   let start = 0;
+  let longLines = 0;
+  let lines = 0;
   while (start < content.length) {
     let end = content.indexOf('\n', start);
     if (end === -1) end = content.length;
-    if (end - start > 2000) return true;
+    lines++;
+    if (end - start > LONG_LINE) longLines++;
     start = end + 1;
   }
-  return false;
+  if (longLines === 0) return false;
+  if (longLines >= 3) return true;
+  if (content.length / lines > 200) return true;
+  return SOURCE_MAP_COMMENT.test(content.slice(-1024));
 }
 
 /** True when the file lives in an Android `src/debug` or `src/debugOptimized` source set (any module). */

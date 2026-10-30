@@ -10,7 +10,9 @@ const SAFE_PREFIX = /^(workspace|file|link|portal|patch|npm|catalog|jsr):/i;
 const GIT_PREFIX = /^(git\+[a-z]+:|git:\/\/|git@|ssh:\/\/|(github|gitlab|bitbucket|gist):)/i;
 const SHORTHAND = /^[\w.-]+\/[\w.-]+(#.*)?$/; // owner/repo (scoped names never appear as specs)
 const HTTP_TARBALL = /^https?:\/\//i;
-const PINNED_FRAGMENT = /#(?:[0-9a-f]{40}|semver:.+|v?\d+(?:\.\d+){1,2}(?:[-+.\w]*)?)$/i;
+// A pin is a commit SHA (full, or a 6+ character short form; it must contain a digit so that a
+// branch like `#feedbeef` is not mistaken for one), a semver range, or a version tag (`#v1.2.3`, `#1.2`).
+const PINNED_FRAGMENT = /#(?:(?=[0-9a-f]*\d)[0-9a-f]{6,40}|semver:.+|v?\d+(?:\.\d+){1,2}(?:[-+.\w]*)?)$/i;
 
 interface Classified {
   severity: Severity;
@@ -71,7 +73,7 @@ const nonRegistrySourceRule: Rule = {
             : 'Code fetched from git or a URL bypasses registry integrity and provenance checks, and a moving branch or tag can change under you.',
           suggestion: unbounded
             ? `Pin "${name}" to a semver range (e.g. "^1.2.3") and commit a lockfile.`
-            : `Publish and install "${name}" from your registry, or pin the git dependency to a full 40-character commit SHA.`,
+            : `Publish and install "${name}" from your registry, or pin the git dependency to a commit SHA or version tag.`,
           category: 'npm',
         });
       }

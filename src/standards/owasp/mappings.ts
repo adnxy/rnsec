@@ -529,7 +529,7 @@ export const RULE_STANDARDS: Record<string, RuleStandards> = define({
     masvs: ["MASVS-CRYPTO-1"], // MASWE-0047 also lists AUTH-1, CODE-3, NETWORK-1; only the crypto control applies here
     cwe: [1240],
     platform: ["cross-platform"],
-    confidence: "medium",
+    confidence: "low",
   },
   HARDCODED_ENCRYPTION_KEY: {
     title: "Hardcoded encryption key or IV",
@@ -872,10 +872,36 @@ export const RULE_STANDARDS: Record<string, RuleStandards> = define({
     confidence: "medium",
     mappingNote: "MASTG-TEST-0398 is Android-only.",
   },
+  TLS_VALIDATION_DISABLED_NATIVE: {
+    title: "TLS validation disabled in native code",
+    maswe: ["MASWE-0027"],
+    mastg: ["MASTG-TEST-0282", "MASTG-TEST-0283", "MASTG-TEST-0284", "MASTG-TEST-0396", "MASTG-TEST-0397"],
+    cwe: [295],
+    platform: ["android", "ios"],
+    confidence: "high",
+    mappingNote: "MASTG-TEST-0282/0283/0284 are Android (trust manager, host name verifier, WebView SSL errors); MASTG-TEST-0396/0397 are iOS (URLSessionDelegate, WKNavigationDelegate).",
+  },
+  GRADLE_INSECURE_REPOSITORY: {
+    title: "Gradle repository over plain HTTP",
+    maswe: ["MASWE-0048"],
+    platform: ["android"],
+    confidence: "medium",
+    mappingNote: "No MASWE covers the build supply chain directly; an HTTP repository lets a network attacker inject code into the app (MASWE-0048), but no MASTG test targets it.",
+  },
+  ANDROID_FILEPROVIDER_BROAD_PATHS: {
+    title: "FileProvider shares broad paths",
+    maswe: ["MASWE-0018"],
+    mastg: ["MASTG-TEST-0357"],
+    cwe: [552],
+    platform: ["android"],
+    confidence: "medium",
+  },
 });
 
 /** Rules with no sound MASVS fit: ruleId -> reason. Disjoint from RULE_STANDARDS. */
 export const UNMAPPED_RULES: Record<string, string> = {
+  FIREBASE_RULES_OPEN_ACCESS:
+    "Firebase security rules are server-side access control for the backend; MASVS and MASWE cover the client app, not the rules that protect its backend.",
   HARDCODED_IP_ADDRESS:
     "Code hygiene (environment coupling); not a MASVS weakness unless the traffic is cleartext, which INSECURE_HTTP_URL covers.",
   IOS_BACKGROUND_MODES_UNNECESSARY:

@@ -16,6 +16,8 @@ rnsec-report.json
 !examples/**/*.json
 # ...and the pinned OWASP standards snapshot, which the build copies into dist
 !src/standards/owasp/snapshot.json
+# ...and the benchmark corpus definition
+!bench/corpus.json
 examples/**/rnsec-report.json
 .build-*/
 

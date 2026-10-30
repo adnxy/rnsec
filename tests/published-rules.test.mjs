@@ -54,7 +54,11 @@ function makeNativeContext(code, filePath) {
 /** expectCount: 'none' | 'some' | exact number. `opts.todo` marks a known divergence from the local FP-reduction work. */
 function check(testName, ruleId, contextOrPromise, expectCount, opts = {}) {
   test(`${ruleId}: ${testName}`, opts, async () => {
-    const findings = await findRule(ruleId).apply(await contextOrPromise);
+    // project-level rules (beginScan / apply / finalize) are exercised as a one-file project
+    const rule = findRule(ruleId);
+    rule.beginScan?.();
+    const findings = await rule.apply(await contextOrPromise);
+    if (rule.finalize) findings.push(...(await rule.finalize(undefined)));
     const matched = findings.filter(f => f.ruleId === ruleId);
     if (expectCount === 'none') assert.equal(matched.length, 0, `expected none, got ${JSON.stringify(matched.map(f => [f.line, f.description]))}`);
     else if (expectCount === 'some') assert.ok(matched.length > 0, 'expected at least one finding');
@@ -585,7 +589,7 @@ check(
   'allows with AppState + blur protection',
   'IOS_MISSING_APP_SNAPSHOT_PROTECTION',
   makeJsContext(
-    `import React from 'react';\nimport { AppState } from 'react-native';\n// banking app\nAppState.addEventListener('change', () => { blur(); });`,
+    `import React from 'react';\nimport { AppState } from 'react-native';\nimport { BlurView } from '@react-native-community/blur';\n// banking app\nAppState.addEventListener('change', s => { if (s === 'inactive') showBlurView(); });`,
     '/app/App.tsx',
   ),
   'none',

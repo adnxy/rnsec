@@ -240,7 +240,7 @@ test('EXCESSIVE_PERMISSIONS: a permission removed with tools:node="remove" is no
   assert.doesNotMatch(f.description, /READ_CONTACTS/);
 });
 
-test('Android manifest: exported share activity and receiver are still flagged, with lines', () => {
+test('Android manifest: exported activity with an app-private action and an exported receiver are still flagged, with lines', () => {
   const r = scan('rnc-android-pos');
   // not the self-closing exported=false service on 13; the receiver on 28 is reported once, by the more specific rule
   assert.deepEqual(lines(r, 'ANDROID_EXPORTED_COMPONENT'), [21]);

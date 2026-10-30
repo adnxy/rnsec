@@ -13,7 +13,7 @@
         "file": "App.tsx",
         "line": 70,
         "severity": "LOW",
-        "confidence": null
+        "confidence": "low"
       },
       {
         "ruleId": "NO_REQUEST_TIMEOUT",
@@ -32,7 +32,7 @@
         "file": "App.tsx",
         "line": 1,
         "severity": "LOW",
-        "confidence": null
+        "confidence": "low"
       },
       {
         "ruleId": "HARDCODED_SECRETS",
@@ -74,21 +74,21 @@
         "file": "App.tsx",
         "line": 35,
         "severity": "HIGH",
-        "confidence": null
+        "confidence": "medium"
       },
       {
         "ruleId": "ASYNCSTORAGE_SENSITIVE_KEY",
         "file": "App.tsx",
         "line": 36,
         "severity": "HIGH",
-        "confidence": null
+        "confidence": "medium"
       },
       {
         "ruleId": "ASYNCSTORAGE_SENSITIVE_KEY",
         "file": "App.tsx",
         "line": 37,
         "severity": "HIGH",
-        "confidence": null
+        "confidence": "medium"
       },
       {
         "ruleId": "JWT_NO_EXPIRY_CHECK",
@@ -137,14 +137,14 @@
         "file": "App.tsx",
         "line": 76,
         "severity": "HIGH",
-        "confidence": null
+        "confidence": "low"
       },
       {
         "ruleId": "SENSITIVE_NAVIGATION_PARAMS",
         "file": "App.tsx",
         "line": 81,
         "severity": "MEDIUM",
-        "confidence": null
+        "confidence": "low"
       },
       {
         "ruleId": "EXPO_AUTH_SESSION_NO_PKCE",
@@ -164,8 +164,8 @@
         "ruleId": "CUSTOM_CRYPTO_IMPLEMENTATION",
         "file": "App.tsx",
         "line": 98,
-        "severity": "HIGH",
-        "confidence": null
+        "severity": "MEDIUM",
+        "confidence": "low"
       },
       {
         "ruleId": "NO_REQUEST_TIMEOUT",
@@ -235,14 +235,14 @@
         "file": "App.tsx",
         "line": 158,
         "severity": "MEDIUM",
-        "confidence": null
+        "confidence": "medium"
       },
       {
         "ruleId": "TEXT_INPUT_NO_SECURE",
         "file": "App.tsx",
         "line": 164,
         "severity": "MEDIUM",
-        "confidence": null
+        "confidence": "medium"
       },
       {
         "ruleId": "INSECURE_WEBVIEW",
@@ -256,7 +256,7 @@
         "file": "App.tsx",
         "line": 184,
         "severity": "LOW",
-        "confidence": null
+        "confidence": "low"
       },
       {
         "ruleId": "WEBVIEW_UNVALIDATED_NAVIGATION",
@@ -270,7 +270,7 @@
         "file": "App.tsx",
         "line": 191,
         "severity": "LOW",
-        "confidence": null
+        "confidence": "low"
       },
       {
         "ruleId": "ANDROID_WEBVIEW_DEBUG_ENABLED",
@@ -291,7 +291,7 @@
         "file": "android/AndroidManifest.xml",
         "line": 8,
         "severity": "MEDIUM",
-        "confidence": null
+        "confidence": "medium"
       },
       {
         "ruleId": "ANDROID_CLEARTEXT_ENABLED",
@@ -375,7 +375,7 @@
         "file": "authService.tsx",
         "line": 1,
         "severity": "MEDIUM",
-        "confidence": null
+        "confidence": "low"
       },
       {
         "ruleId": "NO_REQUEST_TIMEOUT",
@@ -389,7 +389,7 @@
         "file": "authService.tsx",
         "line": 14,
         "severity": "HIGH",
-        "confidence": null
+        "confidence": "medium"
       },
       {
         "ruleId": "JWT_NO_EXPIRY_CHECK",
@@ -417,14 +417,14 @@
         "file": "notifications.tsx",
         "line": 8,
         "severity": "MEDIUM",
-        "confidence": null
+        "confidence": "low"
       },
       {
         "ruleId": "ASYNCSTORAGE_SENSITIVE_KEY",
         "file": "notifications.tsx",
         "line": 13,
         "severity": "HIGH",
-        "confidence": null
+        "confidence": "medium"
       },
       {
         "ruleId": "IOS_INSECURE_PASTEBOARD_USAGE",

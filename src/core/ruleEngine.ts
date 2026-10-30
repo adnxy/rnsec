@@ -1,5 +1,5 @@
 import { resolve, join } from 'path';
-import type { Finding } from '../types/findings.js';
+import type { Finding, RuleError } from '../types/findings.js';
 import type { ProjectInfo, Rule, RuleContext, RuleGroup } from '../types/ruleTypes.js';
 import { parseJSFile, parseJsonSafe } from './astParser.js';
 import { readFileContent } from '../utils/fileUtils.js';
@@ -51,6 +51,48 @@ const SPECIFIC_ONLY_FILE =
   /(^|[\\/])(package-lock\.json|npm-shrinkwrap\.json|firebase\.json|credentials\.json|[^\\/]*\.rules\.json|sentry\.properties|keystore\.properties|signing\.properties)$|[\\/]src[\\/][^\\/]+[\\/]res[\\/]xml[\\/](?!network_security_config\.xml$)[^\\/]+\.xml$/;
 
 /**
+ * Rules that read code patterns (calls, props, string shapes) and so produce noise in generated
+ * bundles and in non-app source (scripts, tooling, e2e, storybook, mocks). Secret, credential,
+ * config, dependency and manifest rules are deliberately absent: they fire everywhere.
+ */
+const CODE_PATTERN_RULES = new Set([
+  'SENSITIVE_LOGGING',
+  'SENSITIVE_DATA_IN_ERROR_MESSAGES',
+  'NETWORK_LOGGER_IN_PRODUCTION',
+  'INSECURE_LINKING_OPEN',
+  'INSECURE_DEEPLINK_HANDLER',
+  'WEBVIEW_POSTMESSAGE_NO_ORIGIN_CHECK',
+  'WEBVIEW_JAVASCRIPT_INJECTION',
+  'WEBVIEW_UNVALIDATED_NAVIGATION',
+  'WEBVIEW_ORIGIN_WHITELIST_WILDCARD',
+  'WEBVIEW_DOM_STORAGE_ENABLED',
+  'WEBVIEW_MIXED_CONTENT',
+  'WEBVIEW_FILE_ACCESS',
+  'MISSING_SECURITY_HEADERS',
+  'INSECURE_RANDOM',
+  'CUSTOM_CRYPTO_IMPLEMENTATION',
+  'WEAK_HASH_ALGORITHM',
+  'NO_REQUEST_TIMEOUT',
+  'MISSING_SESSION_TIMEOUT',
+  'SCREENSHOT_PROTECTION_MISSING',
+  'CLIPBOARD_SENSITIVE_DATA',
+  'SENSITIVE_NAVIGATION_PARAMS',
+  'IMPROPER_BIOMETRIC_FALLBACK',
+  'UNSAFE_DANGEROUSLY_SET_INNER_HTML',
+]);
+
+/** Error messages are capped so one noisy rule cannot bloat the JSON report */
+const MAX_ERROR_MESSAGE = 300;
+
+/** What one scan reports about its own health, next to the findings */
+export interface ScanHealth {
+  /** Rules that threw (once per rule and file) and were skipped for that file */
+  ruleErrors: RuleError[];
+  /** JS/TS files the parser rejected: AST rules did not run on them */
+  parseFailures: number;
+}
+
+/**
  * Rule engine responsible for running security rules against project files
  */
 export class RuleEngine {
@@ -62,6 +104,8 @@ export class RuleEngine {
   private suppressedCount: number = 0;
   private projectInfo: ProjectInfo | undefined;
   private respectGitignore = true;
+  private ruleErrors: RuleError[] = [];
+  private parseFailures = 0;
 
   /**
    * Skip files that git ignores (default true). Tracked files are always scanned.
@@ -130,12 +174,21 @@ export class RuleEngine {
     inputFilePaths: string[],
     progressCallback?: (progress: { current: number; total: number }) => void,
     rootDir?: string
-  ): Promise<{ findings: Finding[]; scannedFiles: number; skippedFiles?: number; suppressedCount?: number }> {
+  ): Promise<{ findings: Finding[]; scannedFiles: number; skippedFiles?: number; suppressedCount?: number } & ScanHealth> {
     const allFindings: Finding[] = [];
     this.skippedFiles = 0;
     this.suppressedCount = 0;
+    this.ruleErrors = [];
+    this.parseFailures = 0;
     this.rootDir = rootDir ? resolve(rootDir) : undefined;
     this.projectInfo = await this.loadProjectInfo();
+    if (this.projectInfo && this.rootDir) {
+      // `finalize` hooks that need the whole project (absence-of-feature rules) read the files the scan skipped
+      const root = this.rootDir;
+      let listing: Promise<string[]> | undefined;
+      this.projectInfo.partialScan = true;
+      this.projectInfo.listProjectFiles = () => (listing ??= this.listFullScanFiles(root));
+    }
     this.beginScan();
 
     const candidates = inputFilePaths.filter(
@@ -165,7 +218,40 @@ export class RuleEngine {
       scannedFiles: totalFiles,
       skippedFiles: this.skippedFiles > 0 ? this.skippedFiles : undefined,
       suppressedCount: this.suppressedCount > 0 ? this.suppressedCount : undefined,
+      ruleErrors: this.ruleErrors,
+      parseFailures: this.parseFailures,
     };
+  }
+
+  private flattenFileGroup(fileGroup: Awaited<ReturnType<typeof walkProjectFiles>>): string[] {
+    return [
+      ...fileGroup.jsFiles,
+      ...fileGroup.jsonFiles,
+      ...fileGroup.xmlFiles,
+      ...fileGroup.plistFiles,
+      ...fileGroup.envFiles,
+      ...fileGroup.gradleFiles,
+      ...fileGroup.registryFiles,
+      ...fileGroup.credentialFiles,
+      ...fileGroup.nativeFiles,
+      ...fileGroup.entitlementFiles,
+      ...fileGroup.firebaseRuleFiles,
+      ...fileGroup.lockfiles,
+      ...fileGroup.credentialPropertyFiles,
+      ...fileGroup.resXmlFiles,
+    ].filter(filePath => !isNonProductionPath(filePath, this.rootDir));
+  }
+
+  /** The file list a full scan of `root` would use (see `ProjectInfo.listProjectFiles`) */
+  private async listFullScanFiles(root: string): Promise<string[]> {
+    const fileGroup = await walkProjectFiles(root, this.excludedPaths, { respectGitignore: this.respectGitignore });
+    return this.flattenFileGroup(fileGroup);
+  }
+
+  private recordRuleError(ruleId: string, filePath: string, error: unknown): string {
+    const message = (error instanceof Error ? error.message : String(error)).slice(0, MAX_ERROR_MESSAGE);
+    this.ruleErrors.push({ ruleId, filePath, message });
+    return message;
   }
 
   private beginScan(): void {
@@ -182,9 +268,8 @@ export class RuleEngine {
       try {
         findings = await rule.finalize(this.projectInfo);
       } catch (error) {
-        if (process.env.RNSEC_VERBOSE) {
-          console.warn(`⚠️  Rule ${rule.id} failed in finalize: ${error instanceof Error ? error.message : String(error)}`);
-        }
+        const message = this.recordRuleError(rule.id, '', error);
+        if (process.env.RNSEC_VERBOSE) console.warn(`⚠️  Rule ${rule.id} failed in finalize: ${message}`);
       }
       for (const finding of findings) {
         if (finding.filePath && finding.line !== undefined) {
@@ -216,10 +301,12 @@ export class RuleEngine {
   async runRulesOnProject(
     rootDir: string,
     progressCallback?: (progress: { current: number; total: number }) => void
-  ): Promise<{ findings: Finding[]; scannedFiles: number; skippedFiles?: number; suppressedCount?: number; unverifiedFiles?: number }> {
+  ): Promise<{ findings: Finding[]; scannedFiles: number; skippedFiles?: number; suppressedCount?: number; unverifiedFiles?: number } & ScanHealth> {
     const allFindings: Finding[] = [];
     this.skippedFiles = 0;
     this.suppressedCount = 0;
+    this.ruleErrors = [];
+    this.parseFailures = 0;
     this.rootDir = resolve(rootDir);
     this.projectInfo = await this.loadProjectInfo();
     this.beginScan();
@@ -229,22 +316,7 @@ export class RuleEngine {
       respectGitignore: this.respectGitignore,
       onUnverifiedFiles: count => { unverifiedFiles = count; },
     });
-    const allFiles = [
-      ...fileGroup.jsFiles,
-      ...fileGroup.jsonFiles,
-      ...fileGroup.xmlFiles,
-      ...fileGroup.plistFiles,
-      ...fileGroup.envFiles,
-      ...fileGroup.gradleFiles,
-      ...fileGroup.registryFiles,
-      ...fileGroup.credentialFiles,
-      ...fileGroup.nativeFiles,
-      ...fileGroup.entitlementFiles,
-      ...fileGroup.firebaseRuleFiles,
-      ...fileGroup.lockfiles,
-      ...fileGroup.credentialPropertyFiles,
-      ...fileGroup.resXmlFiles,
-    ].filter(filePath => !isNonProductionPath(filePath, this.rootDir));
+    const allFiles = this.flattenFileGroup(fileGroup);
 
     const totalFiles = allFiles.length;
 
@@ -265,6 +337,8 @@ export class RuleEngine {
       scannedFiles: totalFiles,
       skippedFiles: this.skippedFiles > 0 ? this.skippedFiles : undefined,
       suppressedCount: this.suppressedCount > 0 ? this.suppressedCount : undefined,
+      ruleErrors: this.ruleErrors,
+      parseFailures: this.parseFailures,
       unverifiedFiles: unverifiedFiles > 0 ? unverifiedFiles : undefined,
     };
   }
@@ -287,11 +361,10 @@ export class RuleEngine {
           const ruleFindings = await rule.apply(context);
           findings.push(...ruleFindings);
         } catch (error) {
-          // A rule crash must not stop the scan, but it must not look like a clean result either
-          if (process.env.RNSEC_VERBOSE) {
-            const reason = error instanceof Error ? error.message : String(error);
-            console.warn(`⚠️  Rule ${rule.id} failed on ${filePath}: ${reason}`);
-          }
+          // A rule crash must not stop the scan, but it must not look like a clean result either:
+          // it is collected into the scan result and reported by the CLI
+          const reason = this.recordRuleError(rule.id, filePath, error);
+          if (process.env.RNSEC_VERBOSE) console.warn(`⚠️  Rule ${rule.id} failed on ${filePath}: ${reason}`);
         }
       }
 
@@ -327,6 +400,8 @@ export class RuleEngine {
     return findings.filter(finding => {
       // path-level, for every rule: findings in tests, vendored code and Android debug source sets never ship
       if (isNonProductionPath(finding.filePath, this.rootDir)) return false;
+      // code-pattern rules only: generated bundles and scripts/tooling/e2e/storybook are not the shipped app code
+      if ((context.isGeneratedBundle || context.isNonAppSource) && CODE_PATTERN_RULES.has(finding.ruleId)) return false;
       if (isLineInRanges(finding.line, devRanges)) return false;
       if (isSuppressed(suppressions, finding.ruleId, finding.line)) {
         this.suppressedCount++;
@@ -441,6 +516,8 @@ export class RuleEngine {
       const parseResult = await parseJSFile(filePath, fileContent);
       if (parseResult.success) {
         context.ast = parseResult.ast;
+      } else {
+        this.parseFailures++;
       }
     } else if (filePath.endsWith('.json')) {
       const config = parseJsonSafe(fileContent);

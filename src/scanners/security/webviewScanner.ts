@@ -271,6 +271,7 @@ const webviewDomStorageRule: Rule = {
       const line = getLineNumber(context.fileContent, node.start || 0);
       findings.push({
         ruleId: 'WEBVIEW_DOM_STORAGE_ENABLED',
+        confidence: 'medium',
         description: 'WebView with DOM storage and JavaScript enabled - sensitive data may be exposed to XSS',
         severity: Severity.MEDIUM,
         filePath: context.filePath,
@@ -540,6 +541,7 @@ const missingSecurityHeadersRule: Rule = {
 
           findings.push({
             ruleId: 'MISSING_SECURITY_HEADERS',
+            confidence: 'low',
             description: 'WebView loading HTML without Content-Security-Policy header',
             severity: Severity.LOW,
             filePath: context.filePath,
@@ -558,6 +560,7 @@ const missingSecurityHeadersRule: Rule = {
 
         findings.push({
           ruleId: 'MISSING_SECURITY_HEADERS',
+          confidence: 'low',
           description: 'WebView loading external content without security headers',
           severity: Severity.LOW,
           filePath: context.filePath,

@@ -1,0 +1,22 @@
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
+        maven { url "https://jitpack.io" }
+        // maven { url "http://old-mirror.example-corp.net/maven2" }
+        maven { url "http://localhost:8081/repository/dev" }
+        maven {
+            url "http://192.168.1.20:8081/repository/dev"
+            allowInsecureProtocol = true
+        }
+        maven { url "http://10.0.2.2:8081/maven" }
+        maven {
+            url "https://repo.example-corp.net/maven"
+            allowInsecureProtocol = true
+        }
+        maven { url "http://$internalMirrorHost/maven" }
+    }
+}
+
+// not a repository: an endpoint written in plain Gradle code
+ext.docsUrl = "http://docs.example-corp.net/guide"

@@ -4,7 +4,7 @@ import type { Rule, RuleContext, RuleGroup } from '../../types/ruleTypes.js';
 import { Severity, type Finding } from '../../types/findings.js';
 import { getLineNumber, extractSnippet, isLikelyIdentifier, looksLikeSecret } from '../../utils/stringUtils.js';
 import { RuleCategory } from '../../types/ruleTypes.js';
-import { identifierHasTerm, identifierEndsWithTerm } from '../../utils/identifierUtils.js';
+import { identifierHasTerm, identifierEndsWithTerm, identifierTokens } from '../../utils/identifierUtils.js';
 
 // Names that tell us a digest protects something (credentials, tokens, signatures), as opposed to
 // identifying content (checksums, ETags, cache keys, git shas, file integrity).
@@ -422,10 +422,138 @@ const weakCipherOrModeRule: Rule = {
   },
 };
 
+// Whole name tokens: `encryptData`, `hash_password`, `xorCipher` match; `HashtagIcon`, `decryptionWorker`, `forget` do not.
+const DIY_CRYPTO_TOKENS = new Set(['encrypt', 'decrypt', 'cipher', 'hash', 'xor', 'rot13', 'caesar', 'vigenere']);
+const SECRET_TOKENS = new Set(['password', 'token', 'secret']);
+const CIPHER_CALL_TOKENS = new Set(['aes', 'cbc', 'ecb', 'ctr', 'cfb', 'ofb', 'gcm', 'cipher', 'createcipheriv', 'createdecipheriv', 'des', 'rc4']);
+const WEAK_DIGEST_TOKENS = new Set(['md5', 'sha1']);
+
+function calleeIdentifierName(callee: any): string | null {
+  if (callee?.type === 'Identifier') return callee.name;
+  if (callee?.type === 'MemberExpression' && !callee.computed && callee.property?.type === 'Identifier') return callee.property.name;
+  return null;
+}
+
+function nameHasToken(name: string, tokens: ReadonlySet<string>): boolean {
+  return identifierTokens(name).some(t => tokens.has(t));
+}
+
+function isDiyCryptoName(name: string): boolean {
+  if (nameHasToken(name, DIY_CRYPTO_TOKENS)) return true;
+  // encodePassword / decodeToken: reversible encoding passed off as protection
+  const tokens = identifierTokens(name);
+  return tokens.some(t => t === 'encode' || t === 'decode') && tokens.some(t => SECRET_TOKENS.has(t));
+}
+
+/** Primitive operations a hand-written cipher or hash is made of: XOR, bit rotation, an S-box table, byte-wise bit twiddling. */
+function bodyCryptoPrimitives(fnPath: any): { cipherLike: boolean; digestLike: boolean } {
+  let xor = false, shl = false, shr = false, bitwise = false, loop = false, charCodes = false, sbox = false;
+  fnPath.traverse({
+    BinaryExpression(p: any) {
+      const op = p.node.operator;
+      if (op === '^') xor = true;
+      if (op === '<<') shl = true;
+      if (op === '>>' || op === '>>>') shr = true;
+      if (op === '&' || op === '|') bitwise = true;
+    },
+    AssignmentExpression(p: any) {
+      const op = p.node.operator;
+      if (op === '^=') xor = true;
+      if (op === '<<=') shl = true;
+      if (op === '>>=' || op === '>>>=') shr = true;
+      if (op === '&=' || op === '|=') bitwise = true;
+    },
+    'ForStatement|WhileStatement|DoWhileStatement|ForOfStatement'() { loop = true; },
+    CallExpression(p: any) {
+      const name = calleeIdentifierName(p.node.callee);
+      if (name === 'charCodeAt' || name === 'fromCharCode' || name === 'codePointAt') charCodes = true;
+    },
+    ArrayExpression(p: any) {
+      if (p.node.elements.length >= 16 && p.node.elements.every((e: any) => e?.type === 'NumericLiteral')) sbox = true;
+    },
+    Identifier(p: any) {
+      // S-box / round-constant table declared at module level
+      if (sbox || !p.isReferencedIdentifier()) return;
+      const init = p.scope.getBinding(p.node.name)?.path?.node?.init;
+      if (init?.type === 'ArrayExpression' && init.elements.length >= 16 && init.elements.every((e: any) => e?.type === 'NumericLiteral')) sbox = true;
+    },
+  });
+  const rotate = shl && shr;
+  return {
+    // XOR with a key, byte-wise bit twiddling over characters
+    cipherLike: xor || rotate || sbox || (loop && charCodes && (bitwise || shl || shr)),
+    // a shift-and-xor hash is a hash-table / checksum hash; a digest has rotations or lookup tables
+    digestLike: rotate || sbox,
+  };
+}
+
+/**
+ * An MD5 / SHA-1 digest used as the key or IV of a cipher call: `kdf = md5Kdf(password, salt); aes(kdf.subarray(0, 32), ...)`.
+ * The primitives come from libraries, so only the construction is the weakness.
+ */
+function bodyDerivesCipherKeyFromWeakDigest(fnPath: any): boolean {
+  const tainted = new Set<string>();
+  const refsTainted = (node: any): boolean => {
+    let hit = false;
+    const visit = (n: any, depth = 0): void => {
+      if (hit || !n || typeof n.type !== 'string' || depth > 8) return;
+      if (n.type === 'Identifier' && tainted.has(n.name)) { hit = true; return; }
+      for (const key of Object.keys(n)) {
+        if (key === 'loc') continue;
+        const v = n[key];
+        if (Array.isArray(v)) v.forEach(c => visit(c, depth + 1));
+        else if (v && typeof v.type === 'string') visit(v, depth + 1);
+      }
+    };
+    visit(node);
+    return hit;
+  };
+  const containsWeakDigestCall = (node: any): boolean => {
+    let hit = false;
+    const visit = (n: any, depth = 0): void => {
+      if (hit || !n || typeof n.type !== 'string' || depth > 8) return;
+      if (n.type === 'CallExpression') {
+        const name = calleeIdentifierName(n.callee);
+        const first = n.arguments[0];
+        if ((name && nameHasToken(name, WEAK_DIGEST_TOKENS)) ||
+            // createHash('md5')
+            (name === 'createHash' && first?.type === 'StringLiteral' && /^(md5|sha-?1)$/i.test(first.value))) { hit = true; return; }
+      }
+      for (const key of Object.keys(n)) {
+        if (key === 'loc') continue;
+        const v = n[key];
+        if (Array.isArray(v)) v.forEach(c => visit(c, depth + 1));
+        else if (v && typeof v.type === 'string') visit(v, depth + 1);
+      }
+    };
+    visit(node);
+    return hit;
+  };
+
+  const declarators: any[] = [];
+  const calls: any[] = [];
+  fnPath.traverse({
+    VariableDeclarator(p: any) { if (p.node.init && p.node.id.type === 'Identifier') declarators.push(p.node); },
+    CallExpression(p: any) { calls.push(p.node); },
+  });
+  for (const d of declarators) if (containsWeakDigestCall(d.init)) tainted.add(d.id.name);
+  if (tainted.size === 0) return false;
+  for (let changed = true; changed;) {
+    changed = false;
+    for (const d of declarators) {
+      if (!tainted.has(d.id.name) && refsTainted(d.init)) { tainted.add(d.id.name); changed = true; }
+    }
+  }
+  return calls.some(c => {
+    const name = calleeIdentifierName(c.callee);
+    return !!name && nameHasToken(name, CIPHER_CALL_TOKENS) && c.arguments.some((a: any) => refsTainted(a));
+  });
+}
+
 const customCryptoImplementationRule: Rule = {
   id: 'CUSTOM_CRYPTO_IMPLEMENTATION',
   description: 'Custom/DIY cryptographic implementation instead of standard library',
-  severity: Severity.HIGH,
+  severity: Severity.MEDIUM,
   fileTypes: ['.js', '.jsx', '.ts', '.tsx'],
   apply: async (context: RuleContext): Promise<Finding[]> => {
     const findings: Finding[] = [];
@@ -444,68 +572,69 @@ const customCryptoImplementationRule: Rule = {
       return findings;
     }
 
-    // Check for functions that implement crypto primitives
+    const checkFunction = (name: string, fnPath: any, nameNode: any) => {
+      if (!isDiyCryptoName(name)) return;
+      const weakKdf = bodyDerivesCipherKeyFromWeakDigest(fnPath);
+      // A wrapper around a library (`sha256(x)`, `CryptoJS.AES.encrypt(...)`) has no primitives of its own
+      if (!weakKdf) {
+        const primitives = bodyCryptoPrimitives(fnPath);
+        // `hash*` alone names hash-table and cache-key hashes as often as digests: it needs digest-grade primitives
+        const tokens = identifierTokens(name);
+        const hashOnly = tokens.includes('hash') && !tokens.some(t => t !== 'hash' && DIY_CRYPTO_TOKENS.has(t));
+        if (!(hashOnly ? primitives.digestLike : primitives.cipherLike)) return;
+      }
+      const line = getLineNumber(context.fileContent, nameNode.start || 0);
+
+      findings.push({
+        ruleId: 'CUSTOM_CRYPTO_IMPLEMENTATION',
+        confidence: 'low',
+        description: weakKdf
+          ? `"${name}" derives a cipher key or IV from an MD5 / SHA-1 digest - weak key derivation`
+          : `Custom cryptographic function "${name}" - likely insecure implementation`,
+        severity: Severity.MEDIUM,
+        filePath: context.filePath,
+        line,
+        snippet: extractSnippet(context.fileContent, line),
+        suggestion: weakKdf
+          ? 'Derive keys with a password-based KDF (PBKDF2, scrypt, Argon2) and a random salt, not a single MD5 / SHA-1 pass.'
+          : 'Never implement custom cryptographic algorithms. Use established libraries like CryptoJS, expo-crypto, react-native-aes-gcm-crypto, or tweetnacl.',
+      });
+    };
+
     traverse(context.ast, {
       FunctionDeclaration(path: any) {
         const { node } = path;
-        if (!node.id) return;
-
-        const funcName = node.id.name.toLowerCase();
-        const diyCryptoPatterns = [
-          /^(custom|my|simple|basic|diy)?(encrypt|decrypt|hash|cipher)/,
-          /^(xor|rot13|caesar|vigenere)(encrypt|decrypt|cipher)?$/,
-          /^(base64)?(encode|decode)(password|token|secret)/,
-        ];
-
-        if (diyCryptoPatterns.some(p => p.test(funcName))) {
-          // Check if it actually implements crypto (not just a wrapper around a library)
-          const funcBody = context.fileContent.substring(node.start || 0, node.end || 0).toLowerCase();
-          const usesLibrary =
-            funcBody.includes('cryptojs') ||
-            funcBody.includes('crypto.') ||
-            funcBody.includes('expo-crypto') ||
-            funcBody.includes('react-native-aes') ||
-            funcBody.includes('tweetnacl') ||
-            funcBody.includes('sjcl') ||
-            funcBody.includes('forge');
-
-          if (!usesLibrary) {
-            const line = getLineNumber(context.fileContent, node.start || 0);
-
-            findings.push({
-              ruleId: 'CUSTOM_CRYPTO_IMPLEMENTATION',
-              description: `Custom cryptographic function "${node.id.name}" - likely insecure implementation`,
-              severity: Severity.HIGH,
-              filePath: context.filePath,
-              line,
-              snippet: extractSnippet(context.fileContent, line),
-              suggestion: 'Never implement custom cryptographic algorithms. Use established libraries like CryptoJS, expo-crypto, react-native-aes-gcm-crypto, or tweetnacl.',
-            });
-          }
-        }
+        if (node.id) checkFunction(node.id.name, path, node);
       },
 
-      // Detect XOR-based "encryption"
+      // const encrypt = (data, key) => { ... }
+      VariableDeclarator(path: any) {
+        const { node } = path;
+        if (node.id.type !== 'Identifier') return;
+        if (node.init?.type !== 'ArrowFunctionExpression' && node.init?.type !== 'FunctionExpression') return;
+        checkFunction(node.id.name, path.get('init'), node);
+      },
+
+      // Detect calls to a local XOR "cipher"
       CallExpression(path: any) {
         const { node } = path;
-        if (node.callee.type === 'Identifier') {
-          const funcName = node.callee.name.toLowerCase();
+        if (node.callee.type !== 'Identifier') return;
+        const tokens = identifierTokens(node.callee.name);
+        if (!tokens.includes('xor') || !tokens.some(t => ['encrypt', 'cipher', 'decode', 'decrypt'].includes(t))) return;
+        // an imported function is a library call, not an implementation in this app
+        if (path.scope.getBinding(node.callee.name)?.kind === 'module') return;
 
-          // XOR encryption pattern
-          if (funcName.includes('xor') && (funcName.includes('encrypt') || funcName.includes('cipher') || funcName.includes('decode'))) {
-            const line = getLineNumber(context.fileContent, node.start || 0);
-
-            findings.push({
-              ruleId: 'CUSTOM_CRYPTO_IMPLEMENTATION',
-              description: `XOR-based encryption "${node.callee.name}" - trivially breakable`,
-              severity: Severity.HIGH,
-              filePath: context.filePath,
-              line,
-              snippet: extractSnippet(context.fileContent, line),
-              suggestion: 'XOR encryption is not secure. Use AES-GCM via CryptoJS or react-native-aes-gcm-crypto for proper encryption.',
-            });
-          }
-        }
+        const line = getLineNumber(context.fileContent, node.start || 0);
+        findings.push({
+          ruleId: 'CUSTOM_CRYPTO_IMPLEMENTATION',
+          confidence: 'low',
+          description: `XOR-based encryption "${node.callee.name}" - trivially breakable`,
+          severity: Severity.MEDIUM,
+          filePath: context.filePath,
+          line,
+          snippet: extractSnippet(context.fileContent, line),
+          suggestion: 'XOR encryption is not secure. Use AES-GCM via CryptoJS or react-native-aes-gcm-crypto for proper encryption.',
+        });
       },
     });
 

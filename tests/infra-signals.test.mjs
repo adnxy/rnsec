@@ -32,6 +32,18 @@ test('generated bundle predicates', () => {
   assert.ok(!isGeneratedBundleContent('const a = 1;\nconst b = 2;\n'));
 });
 
+test('a long inline string alone is not a generated bundle', () => {
+  const component = (n) =>
+    `import React from 'react';\n${'const x = 1;\n'.repeat(400)}const img = 'data:image/png;base64,${'A'.repeat(n)}';\nexport default function C() { return null; }\n`;
+  assert.ok(!isGeneratedBundleContent(component(3500)));
+  assert.ok(!isGeneratedBundleContent(`${component(3500)}${component(3500)}`));
+  // real minified output is still detected
+  const minified = (n) => `var a=function(){${'return 1;'.repeat(n)}};`;
+  assert.ok(isGeneratedBundleContent(`${minified(400)}\n${minified(10)}\n`), 'dense long line');
+  assert.ok(isGeneratedBundleContent(`${'const x = 1;\n'.repeat(900)}var a="${'b'.repeat(2500)}";\n//# sourceMappingURL=app.js.map\n`), 'long line plus source map');
+  assert.ok(isGeneratedBundleContent(['a', 'b', 'c'].map(() => `${'const x = 1;\n'.repeat(900)}var s="${'q'.repeat(2500)}";`).join('\n')), 'several long lines');
+});
+
 async function runProbe(dir) {
   const seen = {};
   const engine = new RuleEngine();

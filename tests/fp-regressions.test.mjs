@@ -15,11 +15,8 @@ test('biometric use alone is not a finding (device passcode fallback is the plat
   assert.equal(byRule(r(), 'IMPROPER_BIOMETRIC_FALLBACK').length, 0);
 });
 
-test('console-only error logging is LOW, not MEDIUM', () => {
-  const [f] = byRule(r(), 'SENSITIVE_DATA_IN_ERROR_MESSAGES');
-  assert.ok(f, 'console.error(error) is still reported');
-  assert.equal(f.severity, 'LOW');
-  assert.equal(f.confidence, 'low');
+test('plain console.error(error) is routine logging, not a finding', () => {
+  assert.equal(byRule(r(), 'SENSITIVE_DATA_IN_ERROR_MESSAGES').length, 0);
 });
 
 test('JS bundled under android/app/src/*/assets is not first-party source', () => {

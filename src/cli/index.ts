@@ -37,7 +37,7 @@ import { credentialFileRules } from '../scanners/security/credentialFilesScanner
 import { SarifReporter } from '../core/sarifReporter.js';
 import { assignFingerprints, readBaseline, resolveRepoRoot, writeBaseline } from '../core/baseline.js';
 import { Severity, SEVERITY_ORDER } from '../types/findings.js';
-import type { ScanResult, Finding, Confidence } from '../types/findings.js';
+import type { ScanResult, Finding, Confidence, RuleError } from '../types/findings.js';
 import { VERSION, DEFAULT_REPORT_FILENAMES, EXIT_CODES } from '../constants.js';
 import { readRnsecConfig } from '../utils/fileUtils.js';
 import { getChangedFiles, isGitRepository } from '../utils/gitUtils.js';
@@ -344,7 +344,7 @@ program
         spinner.text = chalk.cyan('Analyzing source code...');
       }
 
-      let scanResult: { findings: Finding[]; scannedFiles: number; skippedFiles?: number; suppressedCount?: number; unverifiedFiles?: number };
+      let scanResult: { findings: Finding[]; scannedFiles: number; skippedFiles?: number; suppressedCount?: number; unverifiedFiles?: number; ruleErrors?: RuleError[]; parseFailures?: number };
 
       if (options.changedFiles) {
         const changedFiles = await getChangedFiles(options.changedFiles, targetPath);
@@ -386,6 +386,17 @@ program
       // Always stderr, so --json stdout stays pure JSON
       if (scanResult.unverifiedFiles && !options.silent) {
         console.error(chalk.yellow(`Note: ${scanResult.unverifiedFiles} file(s) (.env, credential or registry config) were not checked: ${resolve(targetPath)} is not a git repository and rnsec only reports these when git tracks them.`));
+      }
+
+      // Always stderr (stdout stays pure), even with --silent: a rule that crashed means a result that is not complete
+      const ruleErrors = scanResult.ruleErrors ?? [];
+      const parseFailures = scanResult.parseFailures ?? 0;
+      if (ruleErrors.length > 0 || parseFailures > 0) {
+        const parts = [
+          ruleErrors.length > 0 ? `${ruleErrors.length} rule error(s) in ${[...new Set(ruleErrors.map(e => e.ruleId))].join(', ')}` : '',
+          parseFailures > 0 ? `${parseFailures} file(s) failed to parse` : '',
+        ].filter(Boolean);
+        console.error(chalk.yellow(`⚠️  Scan incomplete: ${parts.join('; ')} (details in the JSON report, or run with RNSEC_VERBOSE=1)`));
       }
 
       scanResult.findings.sort(compareFindings);
@@ -442,6 +453,8 @@ program
         findings,
         suppressedCount: scanResult.suppressedCount,
         baselinedCount: baselinedCount > 0 ? baselinedCount : undefined,
+        ...(ruleErrors.length > 0 ? { ruleErrors } : {}),
+        ...(parseFailures > 0 ? { parseFailures } : {}),
         scannedFiles: scanResult.scannedFiles,
         duration,
         timestamp: new Date(),

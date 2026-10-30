@@ -1,7 +1,7 @@
 {
   "name": "rnsec",
   "version": "1.5.0",
-  "description": "Zero-config security scanner for React Native & Expo apps. Find vulnerabilities with 106 security rules covering Android, iOS, and React Native specific issues.",
+  "description": "Zero-config security scanner for React Native & Expo apps. Find vulnerabilities with 110 security rules covering Android, iOS, and React Native specific issues.",
   "main": "dist/index.js",
   "bin": {
     "rnsec": "dist/index.js"

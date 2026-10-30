@@ -54,3 +54,16 @@ export function blankComments(source: string, ast: any): string {
   }
   return out + source.slice(last);
 }
+
+/**
+ * Name of an object property / class member key as a string, never undefined or a number:
+ * `a`, `'a'` and `1` give 'a', 'a' and '1'. Computed keys other than literals (`[x]`, `[`t${y}`]`)
+ * and anything else give ''. Safe to call `.toLowerCase()` on.
+ */
+export function propertyKeyName(node: { key?: any; computed?: boolean } | null | undefined): string {
+  const key = node?.key;
+  if (!key) return '';
+  if (key.type === 'Identifier') return node?.computed ? '' : String(key.name ?? '');
+  if (key.type === 'StringLiteral' || key.type === 'NumericLiteral' || key.type === 'BigIntLiteral') return String(key.value ?? '');
+  return '';
+}

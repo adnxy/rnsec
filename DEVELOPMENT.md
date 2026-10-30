@@ -360,7 +360,7 @@ git push origin v1.1.1
 
 ## Version History
 
-- v1.5.0 - OWASP MASVS/MASWE/MASTG mapping (`--owasp`), `--format`, CRITICAL severity, exit code 2 for errors, `app.config.js` support (106 rules)
+- v1.5.0 - OWASP MASVS/MASWE/MASTG mapping (`--owasp`), `--format`, CRITICAL severity, exit code 2 for errors, `app.config.js` support (110 rules)
 - v1.4.0 - 18 new rules (105 total), SARIF, baselines, `--fail-on`, `.gitignore` support, false-positive reduction
 - v1.3.0 - 20 new rules (87 total), Expo and React Native coverage
 - v1.2.0 - Supply chain rules (`SUSPICIOUS_LIFECYCLE_SCRIPT`, `OBFUSCATED_EVAL_EXECUTION`)

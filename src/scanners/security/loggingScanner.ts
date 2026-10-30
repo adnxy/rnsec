@@ -216,6 +216,98 @@ function isUserFacingAlert(callee: any): boolean {
   );
 }
 
+const TOAST_OBJECTS = new Set(['Toast', 'toast', 'Snackbar', 'snackbar', 'Burnt', 'Notifier']);
+const TOAST_FUNCTION = /^(?:show|display|notify|present)\w*(?:Toast|Snackbar|Alert|Banner|Notification)$/;
+const RESPONSE_OBJECTS = new Set(['res', 'response', 'reply']);
+const RESPONSE_METHODS = new Set(['send', 'json', 'end', 'write']);
+// Properties of an error that carry request data (axios: `error.config.headers.Authorization`, `error.request`)
+const ERROR_REQUEST_FIELDS = new Set(['config', 'request', 'headers']);
+const JSX_TEXT_ELEMENT = /(?:^|[A-Z])(?:Text|Label|Paragraph|Title|Caption|Message|Banner)$/;
+
+type SinkKind = 'ui' | 'console' | 'response';
+
+function rootIdentifier(node: any): string | null {
+  let cur = node;
+  while (cur) {
+    if (cur.type === 'Identifier') return cur.name;
+    if (cur.type === 'CallExpression') cur = cur.callee;
+    else if (cur.type === 'MemberExpression') cur = cur.object;
+    else return null;
+  }
+  return null;
+}
+
+/** Where a call sends its arguments: a user-visible UI, the device log, or a network response. */
+function sinkKind(callee: any): SinkKind | null {
+  if (isUserFacingAlert(callee)) return 'ui';
+  if (callee.type === 'Identifier') return TOAST_FUNCTION.test(callee.name) ? 'ui' : null;
+  if (callee.type !== 'MemberExpression' || callee.computed) return null;
+  const method = callee.property?.name;
+  if (callee.object?.type === 'Identifier' && callee.object.name === 'console') {
+    return method === 'error' || method === 'warn' ? 'console' : null;
+  }
+  const root = rootIdentifier(callee.object);
+  if (root && TOAST_OBJECTS.has(root)) return 'ui';
+  if (root && RESPONSE_OBJECTS.has(root) && RESPONSE_METHODS.has(method)) return 'response';
+  return null;
+}
+
+function* subNodes(node: any, depth = 0): Generator<any> {
+  if (!node || typeof node.type !== 'string' || depth > 6) return;
+  yield node;
+  for (const key of Object.keys(node)) {
+    if (key === 'loc' || key === 'leadingComments' || key === 'trailingComments') continue;
+    const v = node[key];
+    if (Array.isArray(v)) for (const c of v) yield* subNodes(c, depth + 1);
+    else if (v && typeof v.type === 'string') yield* subNodes(v, depth + 1);
+  }
+}
+
+/**
+ * The error's message or stack reaches this expression (template parts, `+` chains, object fields), or the whole
+ * caught error is passed (only for a name bound by a catch clause / `.catch` callback: a bare `error` elsewhere is
+ * often a validation string).
+ */
+function exposesErrorDetail(arg: any, errorNames: Set<string>, boundNames: Set<string>): boolean {
+  for (const n of subNodes(arg)) {
+    if (isErrorDetailAccess(n, errorNames)) return true;
+  }
+  return arg.type === 'Identifier' && boundNames.has(arg.name);
+}
+
+/** `error.config.headers`, `error.request`, `error.token`: a field of the error that holds request data or a secret. */
+function exposesSensitiveErrorField(arg: any, errorNames: Set<string>): boolean {
+  for (const n of subNodes(arg)) {
+    if (n.type !== 'MemberExpression' || n.computed) continue;
+    const prop = n.property?.name;
+    if (!prop) continue;
+    if (!ERROR_REQUEST_FIELDS.has(prop) && !isSensitiveName(prop)) continue;
+    const root = rootIdentifier(n.object);
+    if (root && errorNames.has(root)) return true;
+  }
+  return false;
+}
+
+/** Error variable names in scope: the usual names, the enclosing catch parameter, a `.catch(e => ...)` callback parameter. */
+function errorNamesAt(path: any, bound = new Set<string>()): Set<string> {
+  const names = new Set(ERROR_OBJECT_NAMES);
+  for (let p = path.parentPath; p; p = p.parentPath) {
+    const n = p.node;
+    if (n.type === 'CatchClause' && n.param?.type === 'Identifier') { names.add(n.param.name); bound.add(n.param.name); }
+    if (
+      (n.type === 'ArrowFunctionExpression' || n.type === 'FunctionExpression') &&
+      n.params[0]?.type === 'Identifier' &&
+      p.parent?.type === 'CallExpression' &&
+      p.parent.callee?.type === 'MemberExpression' &&
+      p.parent.callee.property?.name === 'catch'
+    ) {
+      names.add(n.params[0].name);
+      bound.add(n.params[0].name);
+    }
+  }
+  return names;
+}
+
 const sensitiveDataInErrorMessagesRule: Rule = {
   id: 'SENSITIVE_DATA_IN_ERROR_MESSAGES',
   description: 'Error messages or stack traces may expose sensitive data',
@@ -227,57 +319,74 @@ const sensitiveDataInErrorMessagesRule: Rule = {
     if (!context.ast) {
       return findings;
     }
+    const stripsConsole = context.project?.stripsConsoleInRelease === true;
 
     traverse(context.ast, {
       CallExpression(path: any) {
         const { node } = path;
-        
-        // Check for error logging or displaying
-        const isConsole =
-          node.callee.type === 'MemberExpression' &&
-          node.callee.object.name === 'console' &&
-          (node.callee.property.name === 'error' || node.callee.property.name === 'warn');
-        const isErrorHandling = isConsole || (node.callee.type === 'Identifier' && isUserFacingAlert(node.callee));
+        const kind = sinkKind(node.callee);
+        if (!kind) return;
+        // `catch (e) { Alert.alert(e.message) }` is reported once, at the catch clause
+        if (kind !== 'console' && path.findParent((p: any) => p.isCatchClause())) return;
 
-        if (isErrorHandling) {
-          // A console log only reaches device logs; showing it to the user is the real exposure.
-          const confidence = isConsole ? ('low' as const) : undefined;
+        const boundNames = new Set<string>();
+        const errorNames = errorNamesAt(path, boundNames);
 
-          for (const arg of node.arguments) {
-            // Check if error object or message is being logged directly
-            if (arg.type === 'Identifier' && ERROR_OBJECT_NAMES.has(arg.name)) {
-              const line = getLineNumber(context.fileContent, node.start || 0);
-              
-              findings.push({
-                ruleId: 'SENSITIVE_DATA_IN_ERROR_MESSAGES',
-                description: 'Error object logged directly - may contain sensitive data or stack traces',
-                // console output only reaches device logs; showing the error to the user is the real exposure
-                severity: isConsole ? Severity.LOW : Severity.MEDIUM,
-                ...(confidence ? { confidence } : {}),
-                filePath: context.filePath,
-                line,
-                snippet: extractSnippet(context.fileContent, line),
-                suggestion: 'Log only safe error properties (message, code). Sanitize error messages before displaying to users. Never expose stack traces in production.',
-              });
-            }
-            
-            // Check for error.message being shown to users
-            if (isErrorDetailAccess(arg, ERROR_OBJECT_NAMES)) {
-              const line = getLineNumber(context.fileContent, node.start || 0);
-              
-              findings.push({
-                ruleId: 'SENSITIVE_DATA_IN_ERROR_MESSAGES',
-                description: 'Backend error message or stack trace exposed to user',
-                severity: Severity.MEDIUM,
-                ...(confidence ? { confidence } : {}),
-                filePath: context.filePath,
-                line,
-                snippet: extractSnippet(context.fileContent, line),
-                suggestion: 'Use generic error messages for users. Log detailed errors server-side only. Never expose stack traces or backend errors.',
-              });
-            }
-          }
+        if (kind === 'console') {
+          // Device logs are not a user-visible sink: plain console.error(err) is routine. Only report a logged
+          // value that carries request data or a secret, and nothing when release builds strip console calls.
+          if (stripsConsole) return;
+          if (!node.arguments.some((arg: any) => exposesSensitiveErrorField(arg, errorNames))) return;
+          const line = getLineNumber(context.fileContent, node.start || 0);
+          findings.push({
+            ruleId: 'SENSITIVE_DATA_IN_ERROR_MESSAGES',
+            description: 'Error request data (headers, config, token) written to the log',
+            severity: Severity.LOW,
+            confidence: 'low',
+            filePath: context.filePath,
+            line,
+            snippet: extractSnippet(context.fileContent, line),
+            suggestion: 'Log only safe error properties (message, code). Never log request headers, tokens or the full request config.',
+          });
+          return;
         }
+
+        if (!node.arguments.some((arg: any) => exposesErrorDetail(arg, errorNames, boundNames))) return;
+        const line = getLineNumber(context.fileContent, node.start || 0);
+        findings.push({
+          ruleId: 'SENSITIVE_DATA_IN_ERROR_MESSAGES',
+          description: kind === 'response'
+            ? 'Error message or stack trace sent in a network response'
+            : 'Backend error message or stack trace exposed to user',
+          severity: Severity.MEDIUM,
+          filePath: context.filePath,
+          line,
+          snippet: extractSnippet(context.fileContent, line),
+          suggestion: 'Use generic error messages for users. Log detailed errors server-side only. Never expose stack traces or backend errors.',
+        });
+      },
+
+      // <Text>{error.message}</Text>
+      JSXExpressionContainer(path: any) {
+        const element = path.parent;
+        if (element?.type !== 'JSXElement') return;
+        const name = element.openingElement?.name;
+        const tag = name?.type === 'JSXIdentifier' ? name.name : name?.type === 'JSXMemberExpression' ? name.property?.name : null;
+        if (!tag || !JSX_TEXT_ELEMENT.test(tag)) return;
+        const errorNames = errorNamesAt(path);
+        if (path.findParent((p: any) => p.isCatchClause())) return;
+        if (!Array.from(subNodes(path.node.expression)).some(n => isErrorDetailAccess(n, errorNames))) return;
+        const line = getLineNumber(context.fileContent, path.node.start || 0);
+        findings.push({
+          ruleId: 'SENSITIVE_DATA_IN_ERROR_MESSAGES',
+          description: 'Backend error message or stack trace rendered in the UI',
+          severity: Severity.MEDIUM,
+          confidence: 'low',
+          filePath: context.filePath,
+          line,
+          snippet: extractSnippet(context.fileContent, line),
+          suggestion: 'Render a generic message for users and log the detail separately.',
+        });
       },
       
       // Check for catch blocks that expose errors directly
@@ -289,16 +398,17 @@ const sensitiveDataInErrorMessagesRule: Rule = {
         let exposes = false;
         path.traverse({
           CallExpression(inner: any) {
-            if (exposes || !isUserFacingAlert(inner.node.callee)) return;
+            if (exposes) return;
+            const kind = sinkKind(inner.node.callee);
+            if (kind !== 'ui' && kind !== 'response') return;
             // Alert.alert('Failed', error.message) or `Failed: ${error.message}`
-            inner.traverse({
-              MemberExpression(member: any) {
-                if (isErrorDetailAccess(member.node, errorNames)) {
-                  exposes = true;
-                  member.stop();
-                }
-              },
-            });
+            for (const arg of inner.node.arguments) {
+              if (Array.from(subNodes(arg)).some(n => isErrorDetailAccess(n, errorNames))) {
+                exposes = true;
+                inner.stop();
+                return;
+              }
+            }
           },
         });
 

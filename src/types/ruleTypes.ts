@@ -10,6 +10,16 @@ export interface ProjectInfo {
   androidTargetSdk?: number;
   /** Root babel config (babel.config.*, .babelrc*, package.json "babel") references `transform-remove-console` */
   stripsConsoleInRelease: boolean;
+  /**
+   * True for `--changed-files` scans: `apply` only saw the changed files. A `finalize` hook that must know about
+   * the whole project ("no protection anywhere") then has to ask `listProjectFiles` instead of trusting what it collected.
+   */
+  partialScan?: boolean;
+  /**
+   * Only set when `partialScan` is true. Every source file a full scan of this project would visit (same walker,
+   * excludes and .gitignore handling, test/vendored paths removed), resolved lazily and cached.
+   */
+  listProjectFiles?: () => Promise<string[]>;
 }
 
 /** Source language of a native file (`.java`, `.kt`, `.swift`, `.m`/`.mm`) */

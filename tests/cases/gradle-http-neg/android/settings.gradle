@@ -1,0 +1,6 @@
+pluginManagement {
+    repositories {
+        gradlePluginPortal()
+        maven { url 'https://plugins.example-corp.net/maven' }
+    }
+}
