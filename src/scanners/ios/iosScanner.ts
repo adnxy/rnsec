@@ -1,8 +1,10 @@
 import { Severity, type Finding } from '../../types/findings.js';
 import { RuleCategory } from '../../types/ruleTypes.js';
-import type { Rule, RuleContext, RuleGroup } from '../../types/ruleTypes.js';
+import type { ProjectInfo, Rule, RuleContext, RuleGroup } from '../../types/ruleTypes.js';
 import _traverse from '@babel/traverse';
 import { getLineNumber, extractSnippet } from '../../utils/stringUtils.js';
+import { toRelativePath } from '../../utils/pathFilters.js';
+import { finalizeAbsence, ignoresAtAnchor, isAppSource, lowerCased, type Evidence } from '../../utils/projectEvidence.js';
 
 const traverse = (_traverse as any).default || _traverse;
 
@@ -172,6 +174,7 @@ const iosUsageDescriptionsMissingRule: Rule = {
         if (frameworkNeeded) {
           findings.push({
             ruleId: 'IOS_USAGE_DESCRIPTIONS_MISSING',
+            confidence: 'medium',
             description: `Missing ${feature} usage description - Apple App Store requirement`,
             severity,
             filePath: context.filePath,
@@ -190,6 +193,7 @@ const iosUsageDescriptionsMissingRule: Rule = {
               /\btodo\b/i.test(description)) {
             findings.push({
               ruleId: 'IOS_USAGE_DESCRIPTIONS_MISSING',
+              confidence: 'medium',
               description: `${feature} usage description is too generic or placeholder: "${description}"`,
               severity: Severity.LOW,
               filePath: context.filePath,
@@ -204,6 +208,24 @@ const iosUsageDescriptionsMissingRule: Rule = {
     return findings;
   },
 };
+
+/**
+ * Packages in the root package.json that need a given UIBackgroundModes entry to work. A mode backed by one of
+ * these is in use, not "unnecessary". Only the root package.json is known, so a monorepo app whose
+ * dependencies live in a workspace package keeps its findings.
+ */
+const BACKGROUND_MODE_PACKAGES: Record<string, RegExp> = {
+  audio: /^(?:expo-av|expo-audio|react-native-track-player|react-native-sound|react-native-audio-recorder-player|react-native-audio-api|react-native-music-control|@react-native-community\/audio-toolkit)$/,
+  voip: /^(?:react-native-callkeep|react-native-voip-push-notification|react-native-webrtc|@livekit\/react-native|@stream-io\/video-react-native-sdk|@daily-co\/react-native-daily-js|react-native-incall-manager|react-native-agora|@twilio\/voice-react-native-sdk|react-native-twilio-video-webrtc)$/,
+  location: /^(?:expo-location|react-native-geolocation-service|@react-native-community\/geolocation|react-native-background-geolocation|@transistorsoft\/react-native-background-geolocation|react-native-background-geolocation-android|react-native-location)$/,
+  fetch: /^(?:react-native-background-fetch|expo-background-fetch|expo-background-task|expo-task-manager)$/,
+  'remote-notification': /^(?:expo-notifications|@react-native-firebase\/messaging|react-native-push-notification|@react-native-community\/push-notification-ios|react-native-notifications|react-native-onesignal|@notifee\/react-native|@braze\/react-native-sdk|react-native-fcm|react-native-push-notification-ios)$/,
+};
+
+function isBackedByDependency(mode: string, project: ProjectInfo | undefined): boolean {
+  const pattern = BACKGROUND_MODE_PACKAGES[mode];
+  return !!pattern && !!project && [...project.dependencies].some(name => pattern.test(name));
+}
 
 const iosBackgroundModesUnnecessaryRule: Rule = {
   id: 'IOS_BACKGROUND_MODES_UNNECESSARY',
@@ -233,8 +255,10 @@ const iosBackgroundModesUnnecessaryRule: Rule = {
 
       for (const { mode, concern } of sensitiveBackgroundModes) {
         if (modesContent.includes(mode)) {
+          if (isBackedByDependency(mode, context.project)) continue;
           findings.push({
             ruleId: 'IOS_BACKGROUND_MODES_UNNECESSARY',
+            confidence: 'low',
             description: `Background mode '${mode}' enabled: ${concern}`,
             severity: Severity.LOW,
             filePath: context.filePath,
@@ -625,55 +649,105 @@ const iosInsecurePasteboardUsageRule: Rule = {
   },
 };
 
+/** Keywords that make an App/index file look like a sensitive app */
+const SNAPSHOT_SENSITIVE_INDICATORS = [
+  'payment', 'banking', 'financial', 'fintech', 'healthcare',
+  'medical', 'crypto', 'wallet', 'insurance',
+];
+
+/** Packages that hide the app switcher snapshot or block capture */
+const SNAPSHOT_PROTECTION_PACKAGES = [
+  'react-native-privacy-snapshot',
+  'react-native-screen-protection',
+  'react-native-capture-protection',
+  'expo-screen-capture',
+  'react-native-prevent-screenshot',
+  'react-native-screenshot-prevent',
+];
+
+/** Names of a view/library that covers the screen while the app is inactive (a bare "overlay" or "cover" is far too common) */
+const JS_PRIVACY_COVER = /blurview|blur-view|react-native-blur|@react-native-community\/blur|privacy[\s_-]?(?:screen|overlay|cover|shield|view)|secure[\s_-]?view|snapshot[\s_-]?(?:cover|overlay|protect)|app[\s_-]?(?:cover|shield)/;
+
+const JS_FILE = /\.(?:js|jsx|ts|tsx)$/;
+const IOS_NATIVE_FILE = /\.(?:m|mm|swift)$/;
+const SNAPSHOT_FILES = /\.(?:js|jsx|ts|tsx|m|mm|swift)$/;
+
+/**
+ * Does this file hide the app switcher snapshot? JS: a protection package, an AppState handler for
+ * `inactive`/`background` that covers the screen, or the iOS lifecycle names (as before). Native iOS:
+ * a resign-active / enter-background handler in a file that also puts a view over the window. A bare
+ * `applicationDidBecomeActive` / `applicationDidEnterBackground` (present in most AppDelegates for
+ * unrelated reasons) is not protection.
+ */
+export function hasSnapshotProtection(content: string, filePath: string): boolean {
+  const lower = lowerCased(content);
+  if (IOS_NATIVE_FILE.test(filePath)) {
+    return (
+      /(?:applicationwillresignactive|scenewillresignactive|applicationdidenterbackground|scenedidenterbackground)/.test(lower) &&
+      /(?:uivisualeffectview|uiblureffect|addsubview|overlay|privacy|snapshot|blur)/.test(lower)
+    ) || /(?:rnprivacysnapshot|screenprotector|ignoresnapshotonnextapplicationlaunch)/.test(lower);
+  }
+  if (!JS_FILE.test(filePath)) return false;
+  return (
+    SNAPSHOT_PROTECTION_PACKAGES.some(pkg => lower.includes(pkg)) ||
+    (lower.includes('appstate') && /['"](?:inactive|background)['"]/.test(lower) && JS_PRIVACY_COVER.test(lower)) ||
+    /applyblureffect|privacy[\s_-]?(?:screen|overlay|cover|shield)/.test(lower) ||
+    lower.includes('applicationdidbecomeactive') ||
+    lower.includes('applicationwillresignactive') ||
+    (lower.includes('screencapture') && lower.includes('prevent'))
+  );
+}
+
+/**
+ * Absence-of-feature check, reported once per project (see projectEvidence.ts): candidates are App/index
+ * files that mention a sensitive domain; any snapshot protection anywhere in the project (JS, AppDelegate,
+ * a protection package) means no finding.
+ */
+let snapshotCandidates: Evidence[] = [];
+let snapshotProtected = false;
+
 const iosMissingAppSnapshotProtectionRule: Rule = {
   id: 'IOS_MISSING_APP_SNAPSHOT_PROTECTION',
   description: 'Sensitive app without app snapshot protection on backgrounding',
   severity: Severity.LOW,
-  fileTypes: ['.js', '.jsx', '.ts', '.tsx'],
+  fileTypes: ['.js', '.jsx', '.ts', '.tsx', '.m', '.mm', '.swift'],
+  beginScan: () => {
+    snapshotCandidates = [];
+    snapshotProtected = false;
+  },
   apply: async (context: RuleContext): Promise<Finding[]> => {
-    const findings: Finding[] = [];
+    if (!isAppSource(context) || !SNAPSHOT_FILES.test(context.filePath)) return [];
+    if (hasSnapshotProtection(context.fileContent, context.filePath)) {
+      snapshotProtected = true;
+      return [];
+    }
+    if (!JS_FILE.test(context.filePath)) return [];
 
     // Only check entry-point/App files
-    if (!context.filePath.match(/App\.(tsx|ts|jsx|js)$/) && !context.filePath.includes('index.')) {
-      return findings;
-    }
+    const relPath = toRelativePath(context.filePath, context.project?.rootDir);
+    const isApp = /App\.(tsx|ts|jsx|js)$/.test(relPath);
+    if (!isApp && !relPath.includes('index.')) return [];
 
     const content = context.fileContent.toLowerCase();
+    if (!SNAPSHOT_SENSITIVE_INDICATORS.some(indicator => content.includes(indicator))) return [];
+    if (ignoresAtAnchor(context.fileContent, 'IOS_MISSING_APP_SNAPSHOT_PROTECTION')) return [];
 
-    // Check if this is a sensitive app
-    const sensitiveIndicators = [
-      'payment', 'banking', 'financial', 'fintech', 'healthcare',
-      'medical', 'crypto', 'wallet', 'insurance'
-    ];
-
-    const isSensitiveApp = sensitiveIndicators.some(indicator => content.includes(indicator));
-
-    if (!isSensitiveApp) {
-      return findings;
-    }
-
-    // Check for snapshot/background protection
-    const hasSnapshotProtection =
-      content.includes('appstate') && (content.includes('blur') || content.includes('overlay') || content.includes('splash')) ||
-      content.includes('applicationdidbecomeactive') ||
-      content.includes('applicationwillresignactive') ||
-      content.includes('react-native-privacy-snapshot') ||
-      content.includes('react-native-screen-protection') ||
-      content.includes('screencapture') && content.includes('prevent');
-
-    if (!hasSnapshotProtection) {
-      findings.push({
-        ruleId: 'IOS_MISSING_APP_SNAPSHOT_PROTECTION',
-        description: 'Sensitive app without app snapshot protection - iOS takes screenshots when backgrounding',
-        severity: Severity.LOW,
-        filePath: context.filePath,
-        line: 1,
-        suggestion: 'Add a blur overlay or splash screen when app enters background state to prevent iOS from capturing sensitive screen content in the app switcher.',
-      });
-    }
-
-    return findings;
+    snapshotCandidates.push({ filePath: context.filePath, priority: isApp ? 0 : 1 });
+    return [];
   },
+  finalize: async (project?: ProjectInfo): Promise<Finding[]> =>
+    finalizeAbsence({
+      ruleId: 'IOS_MISSING_APP_SNAPSHOT_PROTECTION',
+      severity: Severity.LOW,
+      headline: 'Sensitive app without app snapshot protection - iOS takes screenshots when backgrounding, and no blur/privacy handler or protection package was found in the project',
+      suggestion: 'Add a blur overlay or splash screen when app enters background state to prevent iOS from capturing sensitive screen content in the app switcher.',
+      project,
+      candidates: snapshotCandidates,
+      protectionSeen: snapshotProtected,
+      protectionPackages: SNAPSHOT_PROTECTION_PACKAGES,
+      protectionFiles: SNAPSHOT_FILES,
+      hasProtection: hasSnapshotProtection,
+    }),
 };
 
 export const iosRules: RuleGroup = {

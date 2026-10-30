@@ -1,0 +1,2631 @@
+{
+  "sources": {
+    "masvs": {
+      "version": "2.1.0",
+      "tag": "v2.1.0",
+      "commit": "8e133d09f4140518ed04cc254b18be9ff4990ffc",
+      "url": "https://github.com/OWASP/masvs/releases/download/v2.1.0/OWASP_MASVS.yaml"
+    },
+    "maswe": {
+      "version": "1.0.0",
+      "tag": "v1.0.0",
+      "commit": "308b82b4bbe29166934fb5a621b40471cfea61db",
+      "url": "https://github.com/OWASP/maswe/releases/download/v1.0.0/OWASP_MASWE.yaml"
+    },
+    "mastg": {
+      "version": "v2.0.0 + master@2eb0f70",
+      "tag": null,
+      "commit": "2eb0f7097e5fc702df2f043fb34079fa42956548",
+      "url": "https://api.github.com/repos/OWASP/mastg/tarball/2eb0f7097e5fc702df2f043fb34079fa42956548"
+    }
+  },
+  "masvs": {
+    "categories": [
+      {
+        "id": "MASVS-AUTH",
+        "title": "Authentication and Authorization"
+      },
+      {
+        "id": "MASVS-CODE",
+        "title": "Code Quality"
+      },
+      {
+        "id": "MASVS-CRYPTO",
+        "title": "Cryptography"
+      },
+      {
+        "id": "MASVS-NETWORK",
+        "title": "Network Communication"
+      },
+      {
+        "id": "MASVS-PLATFORM",
+        "title": "Platform Interaction"
+      },
+      {
+        "id": "MASVS-PRIVACY",
+        "title": "Privacy"
+      },
+      {
+        "id": "MASVS-RESILIENCE",
+        "title": "Resilience Against Reverse Engineering and Tampering"
+      },
+      {
+        "id": "MASVS-STORAGE",
+        "title": "Storage"
+      }
+    ],
+    "controls": {
+      "MASVS-AUTH-1": "The app uses secure authentication and authorization protocols and follows the relevant best practices.",
+      "MASVS-AUTH-2": "The app performs local authentication securely according to the platform best practices.",
+      "MASVS-AUTH-3": "The app secures sensitive operations with additional authentication.",
+      "MASVS-CODE-1": "The app requires an up-to-date platform version.",
+      "MASVS-CODE-2": "The app has a mechanism for enforcing app updates.",
+      "MASVS-CODE-3": "The app only uses software components without known vulnerabilities.",
+      "MASVS-CODE-4": "The app validates and sanitizes all untrusted inputs.",
+      "MASVS-CRYPTO-1": "The app employs current strong cryptography and uses it according to industry best practices.",
+      "MASVS-CRYPTO-2": "The app performs key management according to industry best practices.",
+      "MASVS-NETWORK-1": "The app secures all network traffic according to the current best practices.",
+      "MASVS-NETWORK-2": "The app performs identity pinning for all remote endpoints under the developer's control.",
+      "MASVS-PLATFORM-1": "The app uses IPC mechanisms securely.",
+      "MASVS-PLATFORM-2": "The app uses WebViews securely.",
+      "MASVS-PLATFORM-3": "The app uses the user interface securely.",
+      "MASVS-PRIVACY-1": "The app minimizes access to sensitive data and resources.",
+      "MASVS-PRIVACY-2": "The app prevents identification of the user.",
+      "MASVS-PRIVACY-3": "The app is transparent about data collection and usage.",
+      "MASVS-PRIVACY-4": "The app offers user control over their data.",
+      "MASVS-RESILIENCE-1": "The app validates the integrity of the platform.",
+      "MASVS-RESILIENCE-2": "The app implements anti-tampering mechanisms.",
+      "MASVS-RESILIENCE-3": "The app implements anti-static analysis mechanisms.",
+      "MASVS-RESILIENCE-4": "The app implements anti-dynamic analysis techniques.",
+      "MASVS-STORAGE-1": "The app securely stores sensitive data.",
+      "MASVS-STORAGE-2": "The app prevents leakage of sensitive data."
+    }
+  },
+  "maswe": {
+    "MASWE-0001": {
+      "title": "Sensitive Data Stored Unencrypted in Private Storage",
+      "masvs": [
+        "MASVS-CRYPTO-2",
+        "MASVS-STORAGE-1",
+        "MASVS-STORAGE-2"
+      ],
+      "platform": [
+        "android",
+        "ios"
+      ],
+      "cwe": [
+        200,
+        284,
+        312,
+        313,
+        732,
+        922
+      ]
+    },
+    "MASWE-0002": {
+      "title": "Sensitive Data Stored Unencrypted Outside of Private Storage",
+      "masvs": [
+        "MASVS-STORAGE-1",
+        "MASVS-STORAGE-2"
+      ],
+      "platform": [
+        "android",
+        "ios"
+      ],
+      "cwe": [
+        200,
+        284,
+        312,
+        313,
+        732,
+        921,
+        922
+      ]
+    },
+    "MASWE-0003": {
+      "title": "Cryptographic Keys Stored Outside of Platform Keystore",
+      "masvs": [
+        "MASVS-CRYPTO-2",
+        "MASVS-STORAGE-1"
+      ],
+      "platform": [
+        "android",
+        "ios"
+      ],
+      "cwe": [
+        312,
+        318,
+        321
+      ]
+    },
+    "MASWE-0004": {
+      "title": "Sensitive Data Hardcoded in the App Package",
+      "masvs": [
+        "MASVS-STORAGE-1"
+      ],
+      "platform": [
+        "android",
+        "ios"
+      ],
+      "cwe": [
+        312,
+        321,
+        540,
+        798
+      ]
+    },
+    "MASWE-0005": {
+      "title": "Insertion of Sensitive Data into Logs",
+      "masvs": [
+        "MASVS-STORAGE-2"
+      ],
+      "platform": [
+        "android",
+        "ios"
+      ],
+      "cwe": [
+        209,
+        359,
+        497,
+        532
+      ]
+    },
+    "MASWE-0006": {
+      "title": "Sensitive Data Not Excluded From Backup",
+      "masvs": [
+        "MASVS-STORAGE-2"
+      ],
+      "platform": [
+        "android",
+        "ios"
+      ],
+      "cwe": [
+        212,
+        313
+      ]
+    },
+    "MASWE-0007": {
+      "title": "Improper Encryption",
+      "masvs": [
+        "MASVS-CRYPTO-1",
+        "MASVS-CRYPTO-2"
+      ],
+      "platform": [
+        "android",
+        "ios"
+      ],
+      "cwe": [
+        208,
+        323,
+        325,
+        326,
+        327,
+        329,
+        780
+      ]
+    },
+    "MASWE-0008": {
+      "title": "Improper Hashing",
+      "masvs": [
+        "MASVS-CRYPTO-1"
+      ],
+      "platform": [
+        "android",
+        "ios"
+      ],
+      "cwe": [
+        328
+      ]
+    },
+    "MASWE-0009": {
+      "title": "Improper Use of Message Authentication Code (MAC)",
+      "masvs": [
+        "MASVS-CRYPTO-1",
+        "MASVS-CRYPTO-2"
+      ],
+      "platform": [
+        "android",
+        "ios"
+      ],
+      "cwe": [
+        208,
+        323,
+        327,
+        354,
+        807
+      ]
+    },
+    "MASWE-0010": {
+      "title": "Improper Generation of Cryptographic Signatures",
+      "masvs": [
+        "MASVS-CRYPTO-1",
+        "MASVS-CRYPTO-2"
+      ],
+      "platform": [
+        "android",
+        "ios"
+      ],
+      "cwe": [
+        323,
+        326,
+        327,
+        330
+      ]
+    },
+    "MASWE-0011": {
+      "title": "Improper Verification of Cryptographic Signature",
+      "masvs": [
+        "MASVS-CRYPTO-1"
+      ],
+      "platform": [
+        "android",
+        "ios"
+      ],
+      "cwe": [
+        295,
+        347
+      ]
+    },
+    "MASWE-0012": {
+      "title": "Improper Random Number Generation",
+      "masvs": [
+        "MASVS-CRYPTO-1"
+      ],
+      "platform": [
+        "android",
+        "ios"
+      ],
+      "cwe": [
+        332,
+        337,
+        338
+      ]
+    },
+    "MASWE-0013": {
+      "title": "Improper Cryptographic Key Generation",
+      "masvs": [
+        "MASVS-CRYPTO-2"
+      ],
+      "platform": [
+        "android",
+        "ios"
+      ],
+      "cwe": [
+        326,
+        331,
+        337,
+        338,
+        522
+      ]
+    },
+    "MASWE-0014": {
+      "title": "Improper Cryptographic Key Derivation",
+      "masvs": [
+        "MASVS-CRYPTO-2"
+      ],
+      "platform": [
+        "android",
+        "ios"
+      ],
+      "cwe": [
+        326,
+        327,
+        759,
+        760,
+        916
+      ]
+    },
+    "MASWE-0015": {
+      "title": "Cryptographic Key Rotation Not Implemented",
+      "masvs": [
+        "MASVS-CRYPTO-2"
+      ],
+      "platform": [
+        "android",
+        "ios"
+      ],
+      "cwe": [
+        324
+      ]
+    },
+    "MASWE-0016": {
+      "title": "Cryptographic Key Access Not Restricted",
+      "masvs": [
+        "MASVS-AUTH-2",
+        "MASVS-AUTH-3",
+        "MASVS-CRYPTO-2"
+      ],
+      "platform": [
+        "android",
+        "ios"
+      ],
+      "cwe": [
+        284,
+        306
+      ]
+    },
+    "MASWE-0017": {
+      "title": "Device Secure Lock Not Enforced",
+      "masvs": [
+        "MASVS-CRYPTO-2"
+      ],
+      "platform": [
+        "android",
+        "ios"
+      ]
+    },
+    "MASWE-0018": {
+      "title": "Lack of Authentication or Authorization on App Components",
+      "masvs": [
+        "MASVS-AUTH-1",
+        "MASVS-PLATFORM-1",
+        "MASVS-STORAGE-2"
+      ],
+      "platform": [
+        "android",
+        "ios"
+      ],
+      "cwe": [
+        306,
+        749,
+        862,
+        863,
+        923,
+        926,
+        939,
+        940
+      ]
+    },
+    "MASWE-0019": {
+      "title": "Lack of Auto-fill Support for Credential Providers",
+      "masvs": [
+        "MASVS-AUTH-1",
+        "MASVS-AUTH-3"
+      ],
+      "platform": [
+        "android",
+        "ios"
+      ],
+      "cwe": [
+        287,
+        522
+      ]
+    },
+    "MASWE-0020": {
+      "title": "Local Authentication Can Be Bypassed",
+      "masvs": [
+        "MASVS-AUTH-2",
+        "MASVS-CRYPTO-2"
+      ],
+      "platform": [
+        "android",
+        "ios"
+      ],
+      "cwe": [
+        285,
+        287,
+        312,
+        319,
+        326,
+        602,
+        603,
+        863,
+        922
+      ]
+    },
+    "MASWE-0021": {
+      "title": "Fallback to Non-biometric Credentials Allowed for Sensitive Transactions",
+      "masvs": [
+        "MASVS-AUTH-2"
+      ],
+      "platform": [
+        "android",
+        "ios"
+      ],
+      "cwe": [
+        287,
+        288
+      ]
+    },
+    "MASWE-0022": {
+      "title": "Crypto Keys Not Invalidated on New Biometric Enrollment",
+      "masvs": [
+        "MASVS-AUTH-2",
+        "MASVS-CRYPTO-2"
+      ],
+      "platform": [
+        "android",
+        "ios"
+      ],
+      "cwe": [
+        287,
+        522
+      ]
+    },
+    "MASWE-0023": {
+      "title": "Step-Up Authentication Not Implemented for Sensitive Actions",
+      "masvs": [
+        "MASVS-AUTH-3",
+        "MASVS-PLATFORM-3"
+      ],
+      "platform": [
+        "android",
+        "ios"
+      ],
+      "cwe": [
+        306
+      ]
+    },
+    "MASWE-0024": {
+      "title": "Sensitive Data Accessible After Session Termination",
+      "masvs": [
+        "MASVS-AUTH-3"
+      ],
+      "platform": [
+        "android",
+        "ios"
+      ],
+      "cwe": [
+        285,
+        287,
+        613
+      ]
+    },
+    "MASWE-0025": {
+      "title": "Lack of Non-Repudiation for Critical Actions",
+      "masvs": [
+        "MASVS-AUTH-3"
+      ],
+      "platform": [
+        "android",
+        "ios"
+      ],
+      "cwe": [
+        451,
+        778
+      ]
+    },
+    "MASWE-0026": {
+      "title": "Network Traffic Not Encrypted",
+      "masvs": [
+        "MASVS-NETWORK-1"
+      ],
+      "platform": [
+        "android",
+        "ios"
+      ],
+      "cwe": [
+        319
+      ]
+    },
+    "MASWE-0027": {
+      "title": "Insecure Certificate Validation",
+      "masvs": [
+        "MASVS-NETWORK-1"
+      ],
+      "platform": [
+        "android",
+        "ios"
+      ],
+      "cwe": [
+        295,
+        297
+      ]
+    },
+    "MASWE-0028": {
+      "title": "Insecure Identity Pinning",
+      "masvs": [
+        "MASVS-NETWORK-2"
+      ],
+      "platform": [
+        "android",
+        "ios"
+      ],
+      "cwe": [
+        295
+      ]
+    },
+    "MASWE-0029": {
+      "title": "Insecure Deep Links",
+      "masvs": [
+        "MASVS-CODE-4",
+        "MASVS-PLATFORM-1",
+        "MASVS-STORAGE-2"
+      ],
+      "platform": [
+        "android",
+        "ios"
+      ],
+      "cwe": [
+        917,
+        939
+      ]
+    },
+    "MASWE-0030": {
+      "title": "Improper Use of the Clipboard",
+      "masvs": [
+        "MASVS-PLATFORM-1",
+        "MASVS-STORAGE-2"
+      ],
+      "platform": [
+        "android",
+        "ios"
+      ],
+      "cwe": [
+        200,
+        668
+      ]
+    },
+    "MASWE-0031": {
+      "title": "Allowing Untrusted App Extensions",
+      "masvs": [
+        "MASVS-PLATFORM-1",
+        "MASVS-STORAGE-2"
+      ],
+      "platform": [
+        "ios"
+      ],
+      "cwe": [
+        829
+      ]
+    },
+    "MASWE-0032": {
+      "title": "Insecure Intents",
+      "masvs": [
+        "MASVS-PLATFORM-1",
+        "MASVS-STORAGE-2"
+      ],
+      "platform": [
+        "android"
+      ],
+      "cwe": [
+        927,
+        940
+      ]
+    },
+    "MASWE-0033": {
+      "title": "Sensitive Native Functionality Exposed in WebViews",
+      "masvs": [
+        "MASVS-PLATFORM-2",
+        "MASVS-STORAGE-2"
+      ],
+      "platform": [
+        "android",
+        "ios"
+      ],
+      "cwe": [
+        94,
+        749
+      ]
+    },
+    "MASWE-0034": {
+      "title": "WebViews Allow Access to Local Resources with Untrusted Content",
+      "masvs": [
+        "MASVS-CODE-4",
+        "MASVS-PLATFORM-2",
+        "MASVS-STORAGE-2"
+      ],
+      "platform": [
+        "android",
+        "ios"
+      ],
+      "cwe": [
+        22,
+        79,
+        200,
+        669
+      ]
+    },
+    "MASWE-0035": {
+      "title": "WebViews Loading Untrusted Content",
+      "masvs": [
+        "MASVS-CODE-4",
+        "MASVS-PLATFORM-2"
+      ],
+      "platform": [
+        "android",
+        "ios"
+      ],
+      "cwe": [
+        79,
+        601,
+        829
+      ]
+    },
+    "MASWE-0036": {
+      "title": "Unnecessary Exposure of Sensitive Data via the User Interface",
+      "masvs": [
+        "MASVS-PLATFORM-3",
+        "MASVS-STORAGE-2"
+      ],
+      "platform": [
+        "android",
+        "ios"
+      ],
+      "cwe": [
+        200,
+        359
+      ]
+    },
+    "MASWE-0037": {
+      "title": "Unnecessary Exposure of Sensitive Data via Notifications",
+      "masvs": [
+        "MASVS-PLATFORM-3",
+        "MASVS-STORAGE-2"
+      ],
+      "platform": [
+        "android",
+        "ios"
+      ],
+      "cwe": [
+        200,
+        359
+      ]
+    },
+    "MASWE-0038": {
+      "title": "Insufficient Protection of Sensitive Data from Screenshots or Screen Recordings",
+      "masvs": [
+        "MASVS-PLATFORM-3",
+        "MASVS-STORAGE-2"
+      ],
+      "platform": [
+        "android",
+        "ios"
+      ],
+      "cwe": [
+        200,
+        359
+      ]
+    },
+    "MASWE-0039": {
+      "title": "App Vulnerable to Overlay Attacks",
+      "masvs": [
+        "MASVS-CODE-1",
+        "MASVS-PLATFORM-3"
+      ],
+      "platform": [
+        "android",
+        "ios"
+      ],
+      "cwe": [
+        1021
+      ]
+    },
+    "MASWE-0040": {
+      "title": "Sensitive Data Leaked via Accessibility Services",
+      "masvs": [
+        "MASVS-PLATFORM-3",
+        "MASVS-STORAGE-2"
+      ],
+      "platform": [
+        "android",
+        "ios"
+      ],
+      "cwe": [
+        200,
+        359
+      ]
+    },
+    "MASWE-0041": {
+      "title": "Running on a Recent Platform Version Not Ensured",
+      "masvs": [
+        "MASVS-CODE-1"
+      ],
+      "platform": [
+        "android",
+        "ios"
+      ],
+      "cwe": [
+        451,
+        693,
+        1104,
+        1357
+      ]
+    },
+    "MASWE-0042": {
+      "title": "Latest Platform Version Not Targeted",
+      "masvs": [
+        "MASVS-CODE-1"
+      ],
+      "platform": [
+        "android",
+        "ios"
+      ],
+      "cwe": [
+        693,
+        1357
+      ]
+    },
+    "MASWE-0043": {
+      "title": "Enforced Updating Not Implemented",
+      "masvs": [
+        "MASVS-CODE-2"
+      ],
+      "platform": [
+        "android",
+        "ios"
+      ],
+      "cwe": [
+        602,
+        693
+      ]
+    },
+    "MASWE-0044": {
+      "title": "Dependencies with Known Vulnerabilities",
+      "masvs": [
+        "MASVS-CODE-3"
+      ],
+      "platform": [
+        "android",
+        "ios"
+      ],
+      "cwe": [
+        1357,
+        1395
+      ]
+    },
+    "MASWE-0045": {
+      "title": "Compiler-Provided Security Features Not Used",
+      "masvs": [
+        "MASVS-CODE-3",
+        "MASVS-CODE-4"
+      ],
+      "platform": [
+        "android",
+        "ios"
+      ]
+    },
+    "MASWE-0046": {
+      "title": "Use of Deprecated APIs or Functionality",
+      "masvs": [
+        "MASVS-CODE-3",
+        "MASVS-CRYPTO-2"
+      ],
+      "platform": [
+        "android",
+        "ios"
+      ],
+      "cwe": [
+        327,
+        477,
+        522
+      ]
+    },
+    "MASWE-0047": {
+      "title": "Using Non-Standard APIs for Security-Critical Functionality",
+      "masvs": [
+        "MASVS-AUTH-1",
+        "MASVS-CODE-3",
+        "MASVS-CRYPTO-1",
+        "MASVS-NETWORK-1"
+      ],
+      "platform": [
+        "android",
+        "ios"
+      ],
+      "cwe": [
+        287,
+        326,
+        327,
+        1240
+      ]
+    },
+    "MASWE-0048": {
+      "title": "Malicious Code Included in the App",
+      "masvs": [
+        "MASVS-CODE-3"
+      ],
+      "platform": [
+        "android",
+        "ios"
+      ],
+      "cwe": [
+        506,
+        507,
+        511
+      ]
+    },
+    "MASWE-0049": {
+      "title": "Unsafe Dynamic Code Loading",
+      "masvs": [
+        "MASVS-CODE-4"
+      ],
+      "platform": [
+        "android",
+        "ios"
+      ],
+      "cwe": [
+        494
+      ]
+    },
+    "MASWE-0050": {
+      "title": "Unsafe Handling of Untrusted Data",
+      "masvs": [
+        "MASVS-CODE-4"
+      ],
+      "platform": [
+        "android",
+        "ios"
+      ],
+      "cwe": [
+        20,
+        22,
+        73,
+        89,
+        116,
+        345,
+        348,
+        349,
+        502,
+        611,
+        924
+      ]
+    },
+    "MASWE-0051": {
+      "title": "Root/Jailbreak Detection Not Implemented",
+      "masvs": [
+        "MASVS-RESILIENCE-1",
+        "MASVS-RESILIENCE-4"
+      ],
+      "platform": [
+        "android",
+        "ios"
+      ],
+      "cwe": [
+        1326
+      ]
+    },
+    "MASWE-0052": {
+      "title": "App Virtualization Environment Detection Not Implemented",
+      "masvs": [
+        "MASVS-RESILIENCE-1"
+      ],
+      "platform": [
+        "android",
+        "ios"
+      ],
+      "cwe": [
+        693
+      ]
+    },
+    "MASWE-0053": {
+      "title": "Emulated or Virtual Device Detection Not Implemented",
+      "masvs": [
+        "MASVS-RESILIENCE-1",
+        "MASVS-RESILIENCE-4"
+      ],
+      "platform": [
+        "android",
+        "ios"
+      ]
+    },
+    "MASWE-0054": {
+      "title": "Device Attestation Not Implemented",
+      "masvs": [
+        "MASVS-RESILIENCE-1"
+      ],
+      "platform": [
+        "android",
+        "ios"
+      ]
+    },
+    "MASWE-0055": {
+      "title": "Malware Detection Not Implemented",
+      "masvs": [
+        "MASVS-RESILIENCE-2"
+      ],
+      "platform": [
+        "android",
+        "ios"
+      ],
+      "cwe": [
+        693
+      ]
+    },
+    "MASWE-0056": {
+      "title": "App Attestation Not Implemented",
+      "masvs": [
+        "MASVS-RESILIENCE-2"
+      ],
+      "platform": [
+        "android",
+        "ios"
+      ],
+      "cwe": [
+        347
+      ]
+    },
+    "MASWE-0057": {
+      "title": "App Resources Integrity Not Verified",
+      "masvs": [
+        "MASVS-CODE-4",
+        "MASVS-RESILIENCE-2"
+      ],
+      "platform": [
+        "android",
+        "ios"
+      ],
+      "cwe": [
+        471
+      ]
+    },
+    "MASWE-0058": {
+      "title": "Runtime Code Integrity Not Verified",
+      "masvs": [
+        "MASVS-RESILIENCE-2"
+      ],
+      "platform": [
+        "android",
+        "ios"
+      ]
+    },
+    "MASWE-0059": {
+      "title": "Code Obfuscation Not Implemented",
+      "masvs": [
+        "MASVS-RESILIENCE-3"
+      ],
+      "platform": [
+        "android",
+        "ios"
+      ],
+      "cwe": [
+        693
+      ]
+    },
+    "MASWE-0060": {
+      "title": "Resource Obfuscation Not Implemented",
+      "masvs": [
+        "MASVS-RESILIENCE-3"
+      ],
+      "platform": [
+        "android",
+        "ios"
+      ],
+      "cwe": [
+        693
+      ]
+    },
+    "MASWE-0061": {
+      "title": "Debug Artifacts Not Removed",
+      "masvs": [
+        "MASVS-RESILIENCE-3"
+      ],
+      "platform": [
+        "android",
+        "ios"
+      ],
+      "cwe": [
+        489,
+        497,
+        540,
+        912,
+        1295
+      ]
+    },
+    "MASWE-0062": {
+      "title": "No Application-Level Payload Encryption",
+      "masvs": [
+        "MASVS-NETWORK-1",
+        "MASVS-RESILIENCE-3"
+      ],
+      "platform": [
+        "android",
+        "ios"
+      ],
+      "cwe": [
+        319
+      ]
+    },
+    "MASWE-0063": {
+      "title": "Debug Mechanisms Not Disabled",
+      "masvs": [
+        "MASVS-PLATFORM-2",
+        "MASVS-RESILIENCE-4"
+      ],
+      "platform": [
+        "android",
+        "ios"
+      ],
+      "cwe": [
+        489
+      ]
+    },
+    "MASWE-0064": {
+      "title": "Debugger Detection Not Implemented",
+      "masvs": [
+        "MASVS-RESILIENCE-4"
+      ],
+      "platform": [
+        "android",
+        "ios"
+      ]
+    },
+    "MASWE-0065": {
+      "title": "Dynamic Analysis Tools Detection Not Implemented",
+      "masvs": [
+        "MASVS-RESILIENCE-4"
+      ],
+      "platform": [
+        "android",
+        "ios"
+      ]
+    },
+    "MASWE-0066": {
+      "title": "Inadequate Permission Management",
+      "masvs": [
+        "MASVS-PRIVACY-1"
+      ],
+      "platform": [
+        "android",
+        "ios"
+      ],
+      "cwe": [
+        250
+      ]
+    },
+    "MASWE-0067": {
+      "title": "Lack of Anonymization or Pseudonymisation Measures",
+      "masvs": [
+        "MASVS-PRIVACY-2"
+      ],
+      "platform": [
+        "android",
+        "ios"
+      ],
+      "cwe": [
+        359
+      ]
+    },
+    "MASWE-0068": {
+      "title": "Incorrect Use of Identifiers for User Tracking",
+      "masvs": [
+        "MASVS-PRIVACY-2"
+      ],
+      "platform": [
+        "android",
+        "ios"
+      ],
+      "cwe": [
+        359
+      ]
+    },
+    "MASWE-0069": {
+      "title": "Usage of Non-Privacy-Preserving Functionality",
+      "masvs": [
+        "MASVS-PRIVACY-2"
+      ],
+      "platform": [
+        "android",
+        "ios"
+      ],
+      "cwe": [
+        359
+      ]
+    },
+    "MASWE-0070": {
+      "title": "Inadequate Awareness for Privacy Relevant Actions",
+      "masvs": [
+        "MASVS-PRIVACY-2"
+      ],
+      "platform": [
+        "android",
+        "ios"
+      ],
+      "cwe": [
+        359
+      ]
+    },
+    "MASWE-0071": {
+      "title": "Inadequate Defaults for Privacy Relevant Actions",
+      "masvs": [
+        "MASVS-PRIVACY-2"
+      ],
+      "platform": [
+        "android",
+        "ios"
+      ],
+      "cwe": [
+        359
+      ]
+    },
+    "MASWE-0072": {
+      "title": "Inadequate Privacy Policy",
+      "masvs": [
+        "MASVS-PRIVACY-3"
+      ],
+      "platform": [
+        "android",
+        "ios"
+      ],
+      "cwe": [
+        359
+      ]
+    },
+    "MASWE-0073": {
+      "title": "Inadequate Data Collection Declarations",
+      "masvs": [
+        "MASVS-PRIVACY-1",
+        "MASVS-PRIVACY-3"
+      ],
+      "platform": [
+        "android",
+        "ios"
+      ],
+      "cwe": [
+        359
+      ]
+    },
+    "MASWE-0074": {
+      "title": "Inadequate Tracking Domains Declarations",
+      "masvs": [
+        "MASVS-PRIVACY-3"
+      ],
+      "platform": [
+        "android",
+        "ios"
+      ],
+      "cwe": [
+        359
+      ]
+    },
+    "MASWE-0075": {
+      "title": "Non-Reproducible Builds",
+      "masvs": [
+        "MASVS-PRIVACY-3"
+      ],
+      "platform": [
+        "android",
+        "ios"
+      ],
+      "cwe": [
+        494,
+        1357
+      ]
+    },
+    "MASWE-0076": {
+      "title": "Lack of Proper Data Management Controls",
+      "masvs": [
+        "MASVS-PRIVACY-4"
+      ],
+      "platform": [
+        "android",
+        "ios"
+      ],
+      "cwe": [
+        359
+      ]
+    },
+    "MASWE-0077": {
+      "title": "Inadequate Data Visibility Controls",
+      "masvs": [
+        "MASVS-PRIVACY-4"
+      ],
+      "platform": [
+        "android",
+        "ios"
+      ],
+      "cwe": [
+        359
+      ]
+    },
+    "MASWE-0078": {
+      "title": "Inadequate or Ambiguous User Consent Mechanisms",
+      "masvs": [
+        "MASVS-PRIVACY-4"
+      ],
+      "platform": [
+        "android",
+        "ios"
+      ],
+      "cwe": [
+        200,
+        285,
+        358,
+        359
+      ]
+    }
+  },
+  "mastg": {
+    "MASTG-TEST-0200": {
+      "title": "Files Written to External Storage",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0002"
+      ]
+    },
+    "MASTG-TEST-0201": {
+      "title": "Runtime Use of APIs to Access External Storage",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0002"
+      ]
+    },
+    "MASTG-TEST-0202": {
+      "title": "References to APIs and Permissions for Accessing External Storage",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0002"
+      ]
+    },
+    "MASTG-TEST-0203": {
+      "title": "Runtime Use of Logging APIs",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0005"
+      ]
+    },
+    "MASTG-TEST-0204": {
+      "title": "Insecure Random API Usage",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0012"
+      ]
+    },
+    "MASTG-TEST-0205": {
+      "title": "Non-random Sources Usage",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0012"
+      ]
+    },
+    "MASTG-TEST-0206": {
+      "title": "Undeclared PII in Network Traffic Capture",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0073"
+      ]
+    },
+    "MASTG-TEST-0207": {
+      "title": "Runtime Storage of Unencrypted Data in the App Sandbox",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0001"
+      ]
+    },
+    "MASTG-TEST-0208": {
+      "title": "Insufficient Key Sizes",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0013"
+      ]
+    },
+    "MASTG-TEST-0209": {
+      "title": "Insufficient Key Sizes",
+      "platform": "ios",
+      "maswe": [
+        "MASWE-0013"
+      ]
+    },
+    "MASTG-TEST-0210": {
+      "title": "Broken Symmetric Encryption Algorithms",
+      "platform": "ios",
+      "maswe": [
+        "MASWE-0007"
+      ]
+    },
+    "MASTG-TEST-0211": {
+      "title": "Broken Hashing Algorithms",
+      "platform": "ios",
+      "maswe": [
+        "MASWE-0008"
+      ]
+    },
+    "MASTG-TEST-0212": {
+      "title": "Use of Hardcoded Cryptographic Keys in Code",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0003"
+      ]
+    },
+    "MASTG-TEST-0213": {
+      "title": "Use of Hardcoded Cryptographic Keys in Code",
+      "platform": "ios",
+      "maswe": [
+        "MASWE-0003"
+      ]
+    },
+    "MASTG-TEST-0214": {
+      "title": "Hardcoded Cryptographic Keys in Files",
+      "platform": "ios",
+      "maswe": [
+        "MASWE-0003"
+      ]
+    },
+    "MASTG-TEST-0215": {
+      "title": "Sensitive Data Not Marked For Backup Exclusion",
+      "platform": "ios",
+      "maswe": [
+        "MASWE-0006"
+      ]
+    },
+    "MASTG-TEST-0216": {
+      "title": "Sensitive Data Not Excluded From Backup",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0006"
+      ]
+    },
+    "MASTG-TEST-0217": {
+      "title": "Insecure TLS Protocols Explicitly Allowed in Code",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0026"
+      ]
+    },
+    "MASTG-TEST-0218": {
+      "title": "Insecure TLS Protocols in Network Traffic",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0026"
+      ]
+    },
+    "MASTG-TEST-0219": {
+      "title": "Testing for Debugging Symbols",
+      "platform": "ios",
+      "maswe": [
+        "MASWE-0061"
+      ]
+    },
+    "MASTG-TEST-0220": {
+      "title": "Usage of Outdated Code Signature Format",
+      "platform": "ios",
+      "maswe": [
+        "MASWE-0056"
+      ]
+    },
+    "MASTG-TEST-0221": {
+      "title": "Broken Symmetric Encryption Algorithms",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0007"
+      ]
+    },
+    "MASTG-TEST-0222": {
+      "title": "Position Independent Code (PIC) Not Enabled",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0045"
+      ]
+    },
+    "MASTG-TEST-0223": {
+      "title": "Stack Canaries Not Enabled",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0045"
+      ]
+    },
+    "MASTG-TEST-0224": {
+      "title": "Usage of Insecure APK Signature Version",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0056"
+      ]
+    },
+    "MASTG-TEST-0225": {
+      "title": "Usage of Insecure APK Signature Key Size",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0056"
+      ]
+    },
+    "MASTG-TEST-0226": {
+      "title": "Debuggable Flag Enabled in the AndroidManifest",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0063"
+      ]
+    },
+    "MASTG-TEST-0227": {
+      "title": "Debugging Enabled for WebViews",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0063"
+      ]
+    },
+    "MASTG-TEST-0228": {
+      "title": "Position Independent Code (PIC) not Enabled",
+      "platform": "ios",
+      "maswe": [
+        "MASWE-0045"
+      ]
+    },
+    "MASTG-TEST-0229": {
+      "title": "Stack Canaries Not enabled",
+      "platform": "ios",
+      "maswe": [
+        "MASWE-0045"
+      ]
+    },
+    "MASTG-TEST-0230": {
+      "title": "Automatic Reference Counting (ARC) not enabled",
+      "platform": "ios",
+      "maswe": [
+        "MASWE-0045"
+      ]
+    },
+    "MASTG-TEST-0231": {
+      "title": "References to Logging APIs",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0005"
+      ]
+    },
+    "MASTG-TEST-0232": {
+      "title": "Broken Symmetric Encryption Modes",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0007"
+      ]
+    },
+    "MASTG-TEST-0233": {
+      "title": "Hardcoded HTTP URLs",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0026"
+      ]
+    },
+    "MASTG-TEST-0234": {
+      "title": "Missing Implementation of Server Hostname Verification with SSLSockets",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0027"
+      ]
+    },
+    "MASTG-TEST-0235": {
+      "title": "Android App Configurations Allowing Cleartext Traffic",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0026"
+      ]
+    },
+    "MASTG-TEST-0236": {
+      "title": "Cleartext Traffic Observed on the Network",
+      "platform": "network",
+      "maswe": [
+        "MASWE-0026"
+      ]
+    },
+    "MASTG-TEST-0237": {
+      "title": "Cross-Platform Framework Configurations Allowing Cleartext Traffic",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0026"
+      ]
+    },
+    "MASTG-TEST-0238": {
+      "title": "Runtime Use of Network APIs Transmitting Cleartext Traffic",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0026"
+      ]
+    },
+    "MASTG-TEST-0239": {
+      "title": "Using low-level APIs (e.g. Socket) to set up a custom HTTP connection",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0026"
+      ]
+    },
+    "MASTG-TEST-0240": {
+      "title": "Jailbreak Detection in Code",
+      "platform": "ios",
+      "maswe": [
+        "MASWE-0051"
+      ]
+    },
+    "MASTG-TEST-0241": {
+      "title": "Runtime Use of Jailbreak Detection Techniques",
+      "platform": "ios",
+      "maswe": [
+        "MASWE-0051"
+      ]
+    },
+    "MASTG-TEST-0242": {
+      "title": "Missing Certificate Pinning in Network Security Configuration",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0028"
+      ]
+    },
+    "MASTG-TEST-0243": {
+      "title": "Expired Certificate Pins in the Network Security Configuration",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0028"
+      ]
+    },
+    "MASTG-TEST-0244": {
+      "title": "Missing Certificate Pinning in Network Traffic",
+      "platform": "network",
+      "maswe": [
+        "MASWE-0028"
+      ]
+    },
+    "MASTG-TEST-0245": {
+      "title": "References to Platform Version APIs",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0041"
+      ]
+    },
+    "MASTG-TEST-0246": {
+      "title": "Runtime Use of Secure Screen Lock Detection APIs",
+      "platform": "ios",
+      "maswe": [
+        "MASWE-0017"
+      ]
+    },
+    "MASTG-TEST-0247": {
+      "title": "References to APIs for Detecting Secure Screen Lock",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0017"
+      ]
+    },
+    "MASTG-TEST-0248": {
+      "title": "References to APIs for Detecting Secure Screen Lock",
+      "platform": "ios",
+      "maswe": [
+        "MASWE-0017"
+      ]
+    },
+    "MASTG-TEST-0249": {
+      "title": "Runtime Use of Secure Screen Lock Detection APIs",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0017"
+      ]
+    },
+    "MASTG-TEST-0250": {
+      "title": "References to Content Provider Access in WebViews",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0034"
+      ]
+    },
+    "MASTG-TEST-0251": {
+      "title": "Runtime Use of Content Provider Access APIs in WebViews",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0034"
+      ]
+    },
+    "MASTG-TEST-0252": {
+      "title": "References to Local File Access in WebViews",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0034"
+      ]
+    },
+    "MASTG-TEST-0253": {
+      "title": "Runtime Use of Local File Access APIs in WebViews",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0034"
+      ]
+    },
+    "MASTG-TEST-0254": {
+      "title": "Dangerous App Permissions",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0066"
+      ]
+    },
+    "MASTG-TEST-0255": {
+      "title": "Permission Requests Not Minimized",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0066"
+      ]
+    },
+    "MASTG-TEST-0256": {
+      "title": "Missing Permission Rationale",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0066"
+      ]
+    },
+    "MASTG-TEST-0257": {
+      "title": "Not Resetting Unused Permissions",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0066"
+      ]
+    },
+    "MASTG-TEST-0258": {
+      "title": "References to Keyboard Caching Attributes in UI Elements",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0036"
+      ]
+    },
+    "MASTG-TEST-0261": {
+      "title": "Debuggable Entitlement Enabled in the entitlements.plist",
+      "platform": "ios",
+      "maswe": [
+        "MASWE-0063"
+      ]
+    },
+    "MASTG-TEST-0262": {
+      "title": "References to Backup Configurations Not Excluding Sensitive Data",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0006"
+      ]
+    },
+    "MASTG-TEST-0263": {
+      "title": "Logging of StrictMode Violations",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0061"
+      ]
+    },
+    "MASTG-TEST-0264": {
+      "title": "Runtime Use of StrictMode APIs",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0061"
+      ]
+    },
+    "MASTG-TEST-0265": {
+      "title": "References to StrictMode APIs",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0061"
+      ]
+    },
+    "MASTG-TEST-0266": {
+      "title": "References to APIs for Event-Bound Biometric Authentication",
+      "platform": "ios",
+      "maswe": [
+        "MASWE-0020"
+      ]
+    },
+    "MASTG-TEST-0267": {
+      "title": "Runtime Use Of Event-Bound Biometric Authentication",
+      "platform": "ios",
+      "maswe": [
+        "MASWE-0020"
+      ]
+    },
+    "MASTG-TEST-0268": {
+      "title": "References to APIs Allowing Fallback to Non-Biometric Authentication",
+      "platform": "ios",
+      "maswe": [
+        "MASWE-0021"
+      ]
+    },
+    "MASTG-TEST-0269": {
+      "title": "Runtime Use Of APIs Allowing Fallback to Non-Biometric Authentication",
+      "platform": "ios",
+      "maswe": [
+        "MASWE-0021"
+      ]
+    },
+    "MASTG-TEST-0270": {
+      "title": "References to APIs Detecting Biometric Enrollment Changes",
+      "platform": "ios",
+      "maswe": [
+        "MASWE-0022"
+      ]
+    },
+    "MASTG-TEST-0271": {
+      "title": "Runtime Use Of APIs Detecting Biometric Enrollment Changes",
+      "platform": "ios",
+      "maswe": [
+        "MASWE-0022"
+      ]
+    },
+    "MASTG-TEST-0272": {
+      "title": "Identify Dependencies with Known Vulnerabilities in the Android Project",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0044"
+      ]
+    },
+    "MASTG-TEST-0273": {
+      "title": "Identify Dependencies with Known Vulnerabilities by Scanning Dependency Managers Artifacts",
+      "platform": "ios",
+      "maswe": [
+        "MASWE-0044"
+      ]
+    },
+    "MASTG-TEST-0274": {
+      "title": "Dependencies with Known Vulnerabilities in the App's SBOM",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0044"
+      ]
+    },
+    "MASTG-TEST-0275": {
+      "title": "Dependencies with Known Vulnerabilities in the App's SBOM",
+      "platform": "ios",
+      "maswe": [
+        "MASWE-0044"
+      ]
+    },
+    "MASTG-TEST-0276": {
+      "title": "Use of the iOS General Pasteboard",
+      "platform": "ios",
+      "maswe": [
+        "MASWE-0036"
+      ]
+    },
+    "MASTG-TEST-0277": {
+      "title": "Sensitive Data in the iOS General Pasteboard at Runtime",
+      "platform": "ios",
+      "maswe": [
+        "MASWE-0036"
+      ]
+    },
+    "MASTG-TEST-0278": {
+      "title": "Pasteboard Contents Not Cleared After Use",
+      "platform": "ios",
+      "maswe": [
+        "MASWE-0036"
+      ]
+    },
+    "MASTG-TEST-0279": {
+      "title": "Pasteboard Contents Not Expiring",
+      "platform": "ios",
+      "maswe": [
+        "MASWE-0036"
+      ]
+    },
+    "MASTG-TEST-0280": {
+      "title": "Pasteboard Contents Not Restricted to Local Device",
+      "platform": "ios",
+      "maswe": [
+        "MASWE-0036"
+      ]
+    },
+    "MASTG-TEST-0281": {
+      "title": "Undeclared Known Tracking Domains",
+      "platform": "ios",
+      "maswe": [
+        "MASWE-0074"
+      ]
+    },
+    "MASTG-TEST-0282": {
+      "title": "Unsafe Custom Trust Evaluation",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0027"
+      ]
+    },
+    "MASTG-TEST-0283": {
+      "title": "Incorrect Implementation of Server Hostname Verification",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0027"
+      ]
+    },
+    "MASTG-TEST-0284": {
+      "title": "Incorrect SSL Error Handling in WebViews",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0027"
+      ]
+    },
+    "MASTG-TEST-0285": {
+      "title": "Outdated Android Version Allowing Trust in User-Provided CAs",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0027"
+      ]
+    },
+    "MASTG-TEST-0286": {
+      "title": "Network Security Configuration Allowing Trust in User-Provided CAs",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0027"
+      ]
+    },
+    "MASTG-TEST-0287": {
+      "title": "Runtime Storage of Unencrypted Data via the SharedPreferences API",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0001"
+      ]
+    },
+    "MASTG-TEST-0288": {
+      "title": "Debugging Symbols in Native Binaries",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0061"
+      ]
+    },
+    "MASTG-TEST-0289": {
+      "title": "Runtime Verification of Sensitive Content Exposure in Screenshots During App Backgrounding",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0038"
+      ]
+    },
+    "MASTG-TEST-0290": {
+      "title": "Runtime Verification of Sensitive Content Exposure in Screenshots During App Backgrounding",
+      "platform": "ios",
+      "maswe": [
+        "MASWE-0038"
+      ]
+    },
+    "MASTG-TEST-0291": {
+      "title": "References to Screen Capturing Prevention APIs",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0038"
+      ]
+    },
+    "MASTG-TEST-0292": {
+      "title": "`setRecentsScreenshotEnabled` Not Used to Prevent Screenshots When Backgrounded",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0038"
+      ]
+    },
+    "MASTG-TEST-0293": {
+      "title": "`setSecure` Not Used to Prevent Screenshots in SurfaceViews",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0038"
+      ]
+    },
+    "MASTG-TEST-0294": {
+      "title": "`SecureOn` Not Used to Prevent Screenshots in Compose Dialogs",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0038"
+      ]
+    },
+    "MASTG-TEST-0295": {
+      "title": "GMS Security Provider Not Updated",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0027"
+      ]
+    },
+    "MASTG-TEST-0296": {
+      "title": "Sensitive Data Exposure in Logs",
+      "platform": "ios",
+      "maswe": [
+        "MASWE-0005"
+      ]
+    },
+    "MASTG-TEST-0297": {
+      "title": "Sensitive Data Exposure Through Logging APIs",
+      "platform": "ios",
+      "maswe": [
+        "MASWE-0005"
+      ]
+    },
+    "MASTG-TEST-0298": {
+      "title": "Runtime Monitoring of Files Eligible for Backup",
+      "platform": "ios",
+      "maswe": [
+        "MASWE-0006"
+      ]
+    },
+    "MASTG-TEST-0299": {
+      "title": "Data Protection Classes for Files in Private Storage",
+      "platform": "ios",
+      "maswe": [
+        "MASWE-0001"
+      ]
+    },
+    "MASTG-TEST-0300": {
+      "title": "References to APIs for Storing Unencrypted Data in Private Storage",
+      "platform": "ios",
+      "maswe": [
+        "MASWE-0001"
+      ]
+    },
+    "MASTG-TEST-0301": {
+      "title": "Runtime Use of APIs for Storing Unencrypted Data in Private Storage",
+      "platform": "ios",
+      "maswe": [
+        "MASWE-0001"
+      ]
+    },
+    "MASTG-TEST-0302": {
+      "title": "Sensitive Data Unencrypted in Private Storage Files",
+      "platform": "ios",
+      "maswe": [
+        "MASWE-0001"
+      ]
+    },
+    "MASTG-TEST-0303": {
+      "title": "References to APIs for Storing Unencrypted Data in Shared Storage",
+      "platform": "ios",
+      "maswe": [
+        "MASWE-0002"
+      ]
+    },
+    "MASTG-TEST-0304": {
+      "title": "References to Sensitive Data Unencrypted via Android Room Database",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0001"
+      ]
+    },
+    "MASTG-TEST-0305": {
+      "title": "Sensitive Data Stored Unencrypted via DataStore",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0001"
+      ]
+    },
+    "MASTG-TEST-0306": {
+      "title": "References to Sensitive Data Stored Unencrypted via Android Room DB",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0001"
+      ]
+    },
+    "MASTG-TEST-0307": {
+      "title": "References to Asymmetric Key Pairs Used For Multiple Purposes",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0007"
+      ]
+    },
+    "MASTG-TEST-0308": {
+      "title": "Runtime Use of Asymmetric Key Pairs Used For Multiple Purposes",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0007"
+      ]
+    },
+    "MASTG-TEST-0309": {
+      "title": "References to Reused Initialization Vectors in Symmetric Encryption",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0007"
+      ]
+    },
+    "MASTG-TEST-0310": {
+      "title": "Runtime Use of Reused Initialization Vectors in Symmetric Encryption",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0007"
+      ]
+    },
+    "MASTG-TEST-0311": {
+      "title": "Insecure Random API Usage",
+      "platform": "ios",
+      "maswe": [
+        "MASWE-0012"
+      ]
+    },
+    "MASTG-TEST-0312": {
+      "title": "References to Explicit Security Provider in Cryptographic APIs",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0007"
+      ]
+    },
+    "MASTG-TEST-0313": {
+      "title": "References to APIs for Preventing Keyboard Caching of Text Fields",
+      "platform": "ios",
+      "maswe": [
+        "MASWE-0036"
+      ]
+    },
+    "MASTG-TEST-0314": {
+      "title": "Runtime Monitoring of Text Fields Eligible for Keyboard Caching",
+      "platform": "ios",
+      "maswe": [
+        "MASWE-0036"
+      ]
+    },
+    "MASTG-TEST-0315": {
+      "title": "Sensitive Data Exposed via Notifications",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0037"
+      ]
+    },
+    "MASTG-TEST-0316": {
+      "title": "App Exposing User Authentication Data in Text Input Fields",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0036",
+        "MASWE-0040"
+      ]
+    },
+    "MASTG-TEST-0317": {
+      "title": "Broken Symmetric Encryption Modes",
+      "platform": "ios",
+      "maswe": [
+        "MASWE-0007"
+      ]
+    },
+    "MASTG-TEST-0318": {
+      "title": "References to SDK APIs Known to Handle Sensitive User Data",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0073"
+      ]
+    },
+    "MASTG-TEST-0319": {
+      "title": "Runtime Use of SDK APIs Known to Handle Sensitive User Data",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0073"
+      ]
+    },
+    "MASTG-TEST-0320": {
+      "title": "WebViews Not Cleaning Up Sensitive Data",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0001"
+      ]
+    },
+    "MASTG-TEST-0321": {
+      "title": "Hardcoded HTTP URLs",
+      "platform": "ios",
+      "maswe": [
+        "MASWE-0026"
+      ]
+    },
+    "MASTG-TEST-0322": {
+      "title": "App Transport Security Configurations Allowing Cleartext Traffic",
+      "platform": "ios",
+      "maswe": [
+        "MASWE-0026"
+      ]
+    },
+    "MASTG-TEST-0323": {
+      "title": "Uses of Low-Level Networking APIs for Cleartext Traffic",
+      "platform": "ios",
+      "maswe": [
+        "MASWE-0026"
+      ]
+    },
+    "MASTG-TEST-0324": {
+      "title": "References to Root Detection Mechanisms",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0051"
+      ]
+    },
+    "MASTG-TEST-0325": {
+      "title": "Runtime Use of Root Detection Techniques",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0051"
+      ]
+    },
+    "MASTG-TEST-0326": {
+      "title": "References to APIs Allowing Fallback to Non-Biometric Authentication",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0021"
+      ]
+    },
+    "MASTG-TEST-0327": {
+      "title": "References to APIs for Event-Bound Biometric Authentication",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0020"
+      ]
+    },
+    "MASTG-TEST-0328": {
+      "title": "References to APIs Detecting Biometric Enrollment Changes",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0022"
+      ]
+    },
+    "MASTG-TEST-0329": {
+      "title": "References to APIs Enforcing Authentication without Explicit User Action",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0020"
+      ]
+    },
+    "MASTG-TEST-0330": {
+      "title": "References to APIs for Keys used in Biometric Authentication with Extended Validity Duration",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0020"
+      ]
+    },
+    "MASTG-TEST-0331": {
+      "title": "Use of Deprecated WebView APIs",
+      "platform": "ios",
+      "maswe": [
+        "MASWE-0035"
+      ]
+    },
+    "MASTG-TEST-0332": {
+      "title": "Attacker-Controlled URI in WebViews",
+      "platform": "ios",
+      "maswe": [
+        "MASWE-0035"
+      ]
+    },
+    "MASTG-TEST-0333": {
+      "title": "Overly Broad File Read Access in WebViews",
+      "platform": "ios",
+      "maswe": [
+        "MASWE-0034"
+      ]
+    },
+    "MASTG-TEST-0334": {
+      "title": "Native Code Exposed Through WebViews",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0034"
+      ]
+    },
+    "MASTG-TEST-0335": {
+      "title": "WebView File Origin Access Relaxed by Configuration",
+      "platform": "ios",
+      "maswe": [
+        "MASWE-0034"
+      ]
+    },
+    "MASTG-TEST-0336": {
+      "title": "Runtime Setting of Relaxed WebView File Origin Policies",
+      "platform": "ios",
+      "maswe": [
+        "MASWE-0034"
+      ]
+    },
+    "MASTG-TEST-0337": {
+      "title": "References to Object Deserialization of Untrusted Data",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0050"
+      ]
+    },
+    "MASTG-TEST-0338": {
+      "title": "References to Storage Integrity Check APIs",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0057"
+      ]
+    },
+    "MASTG-TEST-0339": {
+      "title": "SQL Injection in Content Providers",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0050"
+      ]
+    },
+    "MASTG-TEST-0340": {
+      "title": "References to Overlay Attack Protections",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0036"
+      ]
+    },
+    "MASTG-TEST-0341": {
+      "title": "Runtime Use of Hook Detection Techniques",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0058"
+      ]
+    },
+    "MASTG-TEST-0342": {
+      "title": "References to Weak ATS TLS Policy Exceptions in Info.plist",
+      "platform": "ios",
+      "maswe": [
+        "MASWE-0026"
+      ]
+    },
+    "MASTG-TEST-0343": {
+      "title": "URLSession TLS Protocol Configuration",
+      "platform": "ios",
+      "maswe": [
+        "MASWE-0026"
+      ]
+    },
+    "MASTG-TEST-0344": {
+      "title": "Network.framework TLS Protocol Configuration",
+      "platform": "ios",
+      "maswe": [
+        "MASWE-0026"
+      ]
+    },
+    "MASTG-TEST-0345": {
+      "title": "Embedded or Third-party TLS Stack Configuration",
+      "platform": "ios",
+      "maswe": [
+        "MASWE-0026"
+      ]
+    },
+    "MASTG-TEST-0346": {
+      "title": "References to APIs Hiding Sensitive Data in Text Input Fields",
+      "platform": "ios",
+      "maswe": [
+        "MASWE-0036"
+      ]
+    },
+    "MASTG-TEST-0347": {
+      "title": "Runtime Use of APIs Hiding Sensitive Data in Text Input Fields",
+      "platform": "ios",
+      "maswe": [
+        "MASWE-0036"
+      ]
+    },
+    "MASTG-TEST-0348": {
+      "title": "Insecure TLS Protocols in Network Traffic",
+      "platform": "ios",
+      "maswe": [
+        "MASWE-0026"
+      ]
+    },
+    "MASTG-TEST-0349": {
+      "title": "Runtime Use of Insecure Random APIs",
+      "platform": "ios",
+      "maswe": [
+        "MASWE-0012"
+      ]
+    },
+    "MASTG-TEST-0350": {
+      "title": "Runtime Use of Broken Symmetric Encryption Modes",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0007"
+      ]
+    },
+    "MASTG-TEST-0351": {
+      "title": "Runtime Use of Emulator Detection Techniques",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0053"
+      ]
+    },
+    "MASTG-TEST-0352": {
+      "title": "References to Debugging Detection APIs",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0064"
+      ]
+    },
+    "MASTG-TEST-0353": {
+      "title": "Runtime Use of Debugging Detection APIs",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0064"
+      ]
+    },
+    "MASTG-TEST-0354": {
+      "title": "Runtime Use of Hook Detection Techniques",
+      "platform": "ios",
+      "maswe": [
+        "MASWE-0058"
+      ]
+    },
+    "MASTG-TEST-0355": {
+      "title": "References to Unauthorized Database Access through Content Providers",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0018"
+      ]
+    },
+    "MASTG-TEST-0356": {
+      "title": "Runtime Verification of Unauthorized Database Access through Content Providers",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0018"
+      ]
+    },
+    "MASTG-TEST-0357": {
+      "title": "References to Oversharing of File-Based Content Providers",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0018"
+      ]
+    },
+    "MASTG-TEST-0358": {
+      "title": "Implementation Details Exposure Through Logging APIs",
+      "platform": "ios",
+      "maswe": [
+        "MASWE-0061"
+      ]
+    },
+    "MASTG-TEST-0359": {
+      "title": "Implementation Details Exposure in Logs",
+      "platform": "ios",
+      "maswe": [
+        "MASWE-0061"
+      ]
+    },
+    "MASTG-TEST-0360": {
+      "title": "Purpose String Accuracy for Reachable Protected Resource Access",
+      "platform": "ios",
+      "maswe": [
+        "MASWE-0066"
+      ]
+    },
+    "MASTG-TEST-0361": {
+      "title": "Runtime Use of Protected Resource APIs Without Accurate Purpose Strings",
+      "platform": "ios",
+      "maswe": [
+        "MASWE-0066"
+      ]
+    },
+    "MASTG-TEST-0362": {
+      "title": "Entitlements for Unjustified Capability Exposure",
+      "platform": "ios",
+      "maswe": [
+        "MASWE-0066"
+      ]
+    },
+    "MASTG-TEST-0363": {
+      "title": "Runtime Use of Entitlement-Backed APIs for Unjustified Capability Exposure",
+      "platform": "ios",
+      "maswe": [
+        "MASWE-0066"
+      ]
+    },
+    "MASTG-TEST-0364": {
+      "title": "Exported And Unprotected Activities That Expose Sensitive Functionality",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0018"
+      ]
+    },
+    "MASTG-TEST-0365": {
+      "title": "Exported And Unprotected Services That Expose Sensitive Functionality",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0018"
+      ]
+    },
+    "MASTG-TEST-0366": {
+      "title": "Exported And Unprotected Broadcast Receivers That Expose Sensitive Functionality",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0018"
+      ]
+    },
+    "MASTG-TEST-0367": {
+      "title": "Runtime Use of Virtual Device Detection Techniques",
+      "platform": "ios",
+      "maswe": [
+        "MASWE-0053"
+      ]
+    },
+    "MASTG-TEST-0368": {
+      "title": "Insufficient Obfuscation of Security-Relevant Java/Kotlin Code",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0059"
+      ]
+    },
+    "MASTG-TEST-0369": {
+      "title": "Insufficient Obfuscation of Security-Relevant Native Code",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0059"
+      ]
+    },
+    "MASTG-TEST-0370": {
+      "title": "Missing Input Validation in Custom URL Scheme Handlers",
+      "platform": "ios",
+      "maswe": [
+        "MASWE-0029"
+      ]
+    },
+    "MASTG-TEST-0371": {
+      "title": "Missing Source Validation in Custom URL Scheme Handlers",
+      "platform": "ios",
+      "maswe": [
+        "MASWE-0029"
+      ]
+    },
+    "MASTG-TEST-0372": {
+      "title": "Implicit Intents Used for Internal App Communication",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0032"
+      ]
+    },
+    "MASTG-TEST-0374": {
+      "title": "References to Implicit Intents Carrying Sensitive Extras",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0032"
+      ]
+    },
+    "MASTG-TEST-0375": {
+      "title": "Missing Validation of Data Returned from Implicit Intents",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0050"
+      ]
+    },
+    "MASTG-TEST-0376": {
+      "title": "References to Native Bridge APIs in WebViews",
+      "platform": "ios",
+      "maswe": [
+        "MASWE-0034"
+      ]
+    },
+    "MASTG-TEST-0377": {
+      "title": "References to `evaluateJavaScript` Used as Bridge Reply in `WKScriptMessageHandler`",
+      "platform": "ios",
+      "maswe": [
+        "MASWE-0034"
+      ]
+    },
+    "MASTG-TEST-0378": {
+      "title": "References to Password Fields in WebView-Loaded HTML",
+      "platform": "ios",
+      "maswe": [
+        "MASWE-0034"
+      ]
+    },
+    "MASTG-TEST-0379": {
+      "title": "References to `evaluateJavaScript` Without Content World Isolation",
+      "platform": "ios",
+      "maswe": [
+        "MASWE-0034"
+      ]
+    },
+    "MASTG-TEST-0380": {
+      "title": "References to `evaluateJavaScript` Writing Sensitive Data into WebView DOM",
+      "platform": "ios",
+      "maswe": [
+        "MASWE-0034"
+      ]
+    },
+    "MASTG-TEST-0381": {
+      "title": "References to Insecure PendingIntent Creation",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0032"
+      ]
+    },
+    "MASTG-TEST-0382": {
+      "title": "Runtime Use of Enforced Updating APIs",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0043"
+      ]
+    },
+    "MASTG-TEST-0383": {
+      "title": "References to Enforced Updating APIs",
+      "platform": "ios",
+      "maswe": [
+        "MASWE-0043"
+      ]
+    },
+    "MASTG-TEST-0384": {
+      "title": "Runtime Use of Enforced Updating APIs",
+      "platform": "ios",
+      "maswe": [
+        "MASWE-0043"
+      ]
+    },
+    "MASTG-TEST-0385": {
+      "title": "Missing Certificate Pinning in ATS",
+      "platform": "ios",
+      "maswe": [
+        "MASWE-0028"
+      ]
+    },
+    "MASTG-TEST-0386": {
+      "title": "References to Object Deserialization of Untrusted Data",
+      "platform": "ios",
+      "maswe": [
+        "MASWE-0050"
+      ]
+    },
+    "MASTG-TEST-0387": {
+      "title": "References to Storage Integrity Check APIs",
+      "platform": "ios",
+      "maswe": [
+        "MASWE-0057"
+      ]
+    },
+    "MASTG-TEST-0388": {
+      "title": "References to Sensitive Data Stored Unprotected in Shared App Group Containers",
+      "platform": "ios",
+      "maswe": [
+        "MASWE-0001"
+      ]
+    },
+    "MASTG-TEST-0389": {
+      "title": "References to the App-Wide Restriction of Custom Keyboards",
+      "platform": "ios",
+      "maswe": [
+        "MASWE-0031"
+      ]
+    },
+    "MASTG-TEST-0390": {
+      "title": "Full Access Requested by a Custom Keyboard Extension",
+      "platform": "ios",
+      "maswe": [
+        "MASWE-0066"
+      ]
+    },
+    "MASTG-TEST-0391": {
+      "title": "Insufficient Obfuscation of Security-Relevant Native Code",
+      "platform": "ios",
+      "maswe": [
+        "MASWE-0059"
+      ]
+    },
+    "MASTG-TEST-0392": {
+      "title": "References to Enforced Updating APIs",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0043"
+      ]
+    },
+    "MASTG-TEST-0393": {
+      "title": "Use of Unverified App Links",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0029"
+      ]
+    },
+    "MASTG-TEST-0394": {
+      "title": "Missing Input Validation in Custom URL Scheme Handlers",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0029"
+      ]
+    },
+    "MASTG-TEST-0395": {
+      "title": "Missing Input Validation in Universal Link Handlers",
+      "platform": "ios",
+      "maswe": [
+        "MASWE-0029"
+      ]
+    },
+    "MASTG-TEST-0396": {
+      "title": "References to URLSessionDelegate Bypassing Certificate Validation",
+      "platform": "ios",
+      "maswe": [
+        "MASWE-0027"
+      ]
+    },
+    "MASTG-TEST-0397": {
+      "title": "References to WKNavigationDelegate Bypassing Certificate Validation",
+      "platform": "ios",
+      "maswe": [
+        "MASWE-0027"
+      ]
+    },
+    "MASTG-TEST-0398": {
+      "title": "References to WebViewClient URL Loading Handlers",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0035"
+      ]
+    },
+    "MASTG-TEST-0399": {
+      "title": "SafeBrowsing Disabled",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0035"
+      ]
+    },
+    "MASTG-TEST-0400": {
+      "title": "Runtime Use of WebViewClient URL Loading Handlers",
+      "platform": "android",
+      "maswe": [
+        "MASWE-0035"
+      ]
+    },
+    "MASTG-TEST-0401": {
+      "title": "References to Debugging Detection APIs",
+      "platform": "ios",
+      "maswe": [
+        "MASWE-0064"
+      ]
+    },
+    "MASTG-TEST-0402": {
+      "title": "Runtime Use of Debugging Detection APIs",
+      "platform": "ios",
+      "maswe": [
+        "MASWE-0064"
+      ]
+    }
+  }
+}

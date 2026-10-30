@@ -3,6 +3,7 @@ import { RuleCategory } from '../../types/ruleTypes.js';
 import type { Rule, RuleContext, RuleGroup } from '../../types/ruleTypes.js';
 import { getLineNumber } from '../../utils/stringUtils.js';
 import { isPlaceholderValue } from '../../utils/sensitiveDataPatterns.js';
+import { isLocalOrPrivateHost } from '../../utils/hostUtils.js';
 
 const baseName = (filePath: string): string => filePath.split(/[\\/]/).pop() ?? '';
 
@@ -183,7 +184,101 @@ const signingCredentialsRule: Rule = {
   },
 };
 
+/** Offset of the `{` that most tightly encloses `index` inside `src[from..]`, or -1 when `index` is at the top level. */
+function innermostOpen(src: string, from: number, index: number): number {
+  const stack: number[] = [];
+  let quote: string | null = null;
+  for (let i = from; i < index; i++) {
+    const c = src[i];
+    if (quote) {
+      if (c === '\\') i++;
+      else if (c === quote) quote = null;
+    } else if (c === '"' || c === "'") quote = c;
+    else if (c === '{') stack.push(i);
+    else if (c === '}') stack.pop();
+  }
+  return stack.length > 0 ? stack[stack.length - 1] : -1;
+}
+
+// `url "http://h"`, `url = uri("http://h")`, `setUrl('http://h')`, `maven("http://h")`, `maven(url = "http://h")`
+const HTTP_REPOSITORY_URL =
+  /(?:\burl\b\s*(?:=\s*|\s+)|\bsetUrl\s*\(\s*|\bmaven\s*\(\s*(?:url\s*=\s*)?)(?:(?:java\.net\.)?[uU][rR][iI]\s*\(\s*|\bresources\.uri\s*\(\s*)?(["'])(http:\/\/[^"'\s]+)\1/g;
+const ALLOW_INSECURE = /\b(?:is)?[aA]llowInsecureProtocol\s*(?:=\s*)?true\b/g;
+
+const gradleInsecureRepositoryRule: Rule = {
+  id: 'GRADLE_INSECURE_REPOSITORY',
+  description: 'Gradle repository fetched over plain HTTP',
+  severity: Severity.HIGH,
+  fileTypes: ['.gradle', '.kts'],
+  apply: async (context: RuleContext): Promise<Finding[]> => {
+    const name = baseName(context.filePath);
+    if (!/^(?:build|settings)\.gradle(?:\.kts)?$/.test(name)) return [];
+    const src = blankGradleComments(context.fileContent);
+    if (!/http:\/\/|allowInsecureProtocol|AllowInsecureProtocol/.test(src)) return [];
+    const findings: Finding[] = [];
+    const flaggedBlocks = new Set<number>();
+    const reported = new Set<number>();
+
+    const report = (index: number, description: string, confidence: 'high' | 'medium', snippet: string): void => {
+      const line = getLineNumber(src, index);
+      if (reported.has(line)) return;
+      reported.add(line);
+      findings.push({
+        ruleId: 'GRADLE_INSECURE_REPOSITORY',
+        description,
+        severity: Severity.HIGH,
+        confidence,
+        filePath: context.filePath,
+        line,
+        snippet,
+        reason: 'Dependencies and plugins fetched over HTTP can be replaced in transit (rogue network, compromised proxy), which puts attacker code into the app and the build.',
+        suggestion: 'Use an https:// repository URL and remove allowInsecureProtocol. For an internal mirror, serve it over HTTPS.',
+      });
+    };
+
+    const blockRe = /\brepositories\s*\{/g;
+    let m: RegExpExecArray | null;
+    while ((m = blockRe.exec(src)) !== null) {
+      const open = m.index + m[0].length - 1;
+      const end = matchBrace(src, open);
+      if (end === -1) continue;
+      const body = src.slice(open + 1, end - 1);
+      const offset = open + 1;
+
+      HTTP_REPOSITORY_URL.lastIndex = 0;
+      let u: RegExpExecArray | null;
+      while ((u = HTTP_REPOSITORY_URL.exec(body)) !== null) {
+        const url = u[2];
+        // a host built from a variable cannot be judged; local and LAN hosts are development mirrors
+        if (/^http:\/\/[^/]*\$/.test(url) || isLocalOrPrivateHost(url)) continue;
+        const index = offset + u.index;
+        const block = innermostOpen(src, open, index);
+        if (block !== -1) flaggedBlocks.add(block);
+        report(index, `Gradle repository uses a plain HTTP URL (${url.replace(/^(http:\/\/[^/]+).*$/, '$1')})`, 'high', `url "${url}"`);
+      }
+
+      ALLOW_INSECURE.lastIndex = 0;
+      let a: RegExpExecArray | null;
+      while ((a = ALLOW_INSECURE.exec(body)) !== null) {
+        const index = offset + a.index;
+        const block = innermostOpen(src, open, index);
+        if (block !== -1) {
+          if (flaggedBlocks.has(block)) continue;
+          const blockEnd = matchBrace(src, block);
+          const blockText = blockEnd === -1 ? '' : src.slice(block, blockEnd);
+          const local = /(["'])(http:\/\/[^"'\s]+)\1/.exec(blockText);
+          if (local && (isLocalOrPrivateHost(local[2]) || /^http:\/\/[^/]*\$/.test(local[2]))) continue;
+          // the flag does nothing for an https:// repository URL (it only matters for an http redirect)
+          if (!local && /(["'])https:\/\/[^"'\s]+\1/.test(blockText)) continue;
+        }
+        report(index, 'Gradle repository sets allowInsecureProtocol = true (HTTP repository allowed)', 'medium', a[0]);
+      }
+    }
+    return findings;
+  },
+};
+
 export const gradleRules: RuleGroup = {
   category: RuleCategory.MANIFEST,
-  rules: [signingCredentialsRule],
+  rules: [signingCredentialsRule, gradleInsecureRepositoryRule],
 };

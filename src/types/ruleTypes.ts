@@ -10,6 +10,16 @@ export interface ProjectInfo {
   androidTargetSdk?: number;
   /** Root babel config (babel.config.*, .babelrc*, package.json "babel") references `transform-remove-console` */
   stripsConsoleInRelease: boolean;
+  /**
+   * True for `--changed-files` scans: `apply` only saw the changed files. A `finalize` hook that must know about
+   * the whole project ("no protection anywhere") then has to ask `listProjectFiles` instead of trusting what it collected.
+   */
+  partialScan?: boolean;
+  /**
+   * Only set when `partialScan` is true. Every source file a full scan of this project would visit (same walker,
+   * excludes and .gitignore handling, test/vendored paths removed), resolved lazily and cached.
+   */
+  listProjectFiles?: () => Promise<string[]>;
 }
 
 /** Source language of a native file (`.java`, `.kt`, `.swift`, `.m`/`.mm`) */
@@ -66,12 +76,14 @@ export interface RnsecConfig {
   };
   exclude?: string[]
   /** Exit non-zero when a finding at or above this level is reported (default: high) */
-  failOn?: 'high' | 'medium' | 'low' | 'none';
+  failOn?: 'critical' | 'high' | 'medium' | 'low' | 'none';
   /** Per-rule severity overrides, e.g. { "INSECURE_HTTP_URL": "LOW" } */
-  severityOverrides?: Record<string, 'HIGH' | 'MEDIUM' | 'LOW'>;
+  severityOverrides?: Record<string, 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW'>;
   /** Path to a baseline file (relative to the scan root); listed findings are not reported */
   baseline?: string;
   /** Skip files that git ignores (default true; tracked files are always scanned) */
   respectGitignore?: boolean;
+  /** Same as --owasp: attach MASVS/MASWE/MASTG/CWE data and a MASVS coverage section to the report */
+  owasp?: boolean;
   // Future: other config options
 }

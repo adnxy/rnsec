@@ -20,7 +20,7 @@
 
         <activity android:name=".ShareActivity" android:exported="true">
             <intent-filter>
-                <action android:name="android.intent.action.SEND" />
+                <action android:name="com.example.app.ACTION_SHARE_INTERNAL" />
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </activity>

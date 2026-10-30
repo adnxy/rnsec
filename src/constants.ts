@@ -1,4 +1,4 @@
-export const VERSION = '1.4.0';
+export const VERSION = '1.5.0';
 
 export const DEFAULT_REPORT_FILENAMES = {
   HTML: 'rnsec-report.html',
@@ -20,8 +20,10 @@ export const TERMINAL = {
 
 export const EXIT_CODES = {
   SUCCESS: 0,
+  /** Findings at or above --fail-on (kept name; also covers critical) */
   HIGH_SEVERITY_FOUND: 1,
-  ERROR: 1,
+  /** Scan, internal or usage error (invalid arguments, unreadable config or baseline) */
+  ERROR: 2,
 } as const;
 
 export const FILE_EXTENSIONS = {

@@ -1,0 +1,17 @@
+# Local hook for https://pre-commit.com: runs rnsec before every commit.
+# Recommended: install rnsec as a project dependency (npm install --save-dev rnsec) so everyone runs the same
+# version. `npx --no` never downloads anything: it uses the local install first and otherwise falls back to
+# any `rnsec` on PATH (for example a global install), and fails only when there is none.
+#
+# rnsec scans the whole project (pass_filenames: false) and exits 1 on findings at or above --fail-on, which
+# blocks the commit. In console mode it also writes rnsec-report.html and rnsec-report.json into the working
+# directory, so add both to .gitignore. Do not add --silent: it hides why the hook failed.
+repos:
+  - repo: local
+    hooks:
+      - id: rnsec
+        name: rnsec security scan
+        entry: npx --no rnsec scan --fail-on high
+        language: system
+        pass_filenames: false
+        always_run: true

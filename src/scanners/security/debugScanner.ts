@@ -53,6 +53,7 @@ const testCredentialsRule: Rule = {
       const line = getLineNumber(context.fileContent, node.start || 0);
       findings.push({
         ruleId: 'TEST_CREDENTIALS_IN_CODE',
+        confidence: 'medium',
         description: `Test ${type} found in production code: ${shown}`,
         severity: Severity.MEDIUM,
         filePath: context.filePath,
@@ -172,6 +173,7 @@ const debugEndpointsRule: Rule = {
         const line = getLineNumber(context.fileContent, node.start || 0);
         findings.push({
           ruleId: 'DEBUG_ENDPOINTS_EXPOSED',
+          confidence: 'medium',
           description: `Debug endpoint exposed: ${value}`,
           severity: Severity.HIGH,
           filePath: context.filePath,

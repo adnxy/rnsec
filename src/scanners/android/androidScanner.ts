@@ -55,6 +55,88 @@ function isLauncherComponent(text: string): boolean {
   return /android\.intent\.action\.MAIN/.test(text) && /android\.intent\.category\.LAUNCHER/.test(text);
 }
 
+interface IntentFilterInfo {
+  /** Offset of `<intent-filter` in the manifest text */
+  index: number;
+  actions: string[];
+  categories: string[];
+  data: Array<{ scheme?: string; host?: string }>;
+}
+
+/** Every `<intent-filter>` of `text`, with exact action / category names and `<data>` scheme/host (`index` is relative to `text`) */
+function parseIntentFilters(text: string): IntentFilterInfo[] {
+  const filters: IntentFilterInfo[] = [];
+  const re = /<intent-filter(?=[\s>])[^>]*>[\s\S]*?<\/intent-filter>/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) {
+    const body = m[0];
+    const names = (tag: string) =>
+      [...body.matchAll(new RegExp(`<${tag}(?=[\\s/>])((?:"[^"]*"|'[^']*'|[^>"'])*)>`, 'g'))];
+    filters.push({
+      index: m.index,
+      actions: names('action').map(a => attrValue(a[0], 'android:name') ?? '').filter(Boolean),
+      categories: names('category').map(a => attrValue(a[0], 'android:name') ?? '').filter(Boolean),
+      data: names('data').map(d => ({ scheme: attrValue(d[0], 'android:scheme'), host: attrValue(d[0], 'android:host') })),
+    });
+  }
+  return filters;
+}
+
+const ACTION_VIEW = 'android.intent.action.VIEW';
+const SHARE_ACTIONS = new Set(['android.intent.action.SEND', 'android.intent.action.SEND_MULTIPLE']);
+
+/**
+ * A deep link: VIEW + BROWSABLE for a named scheme. `<data>` elements of one filter merge, so `https` plus a
+ * host in another element is one specific link. Not a deep link: a `*` scheme or host, or http(s) with no host
+ * anywhere in the filter (it would claim every web URL), or no scheme at all.
+ */
+function isSpecificDeepLink(f: IntentFilterInfo): boolean {
+  if (!f.actions.length || !f.actions.every(a => a === ACTION_VIEW)) return false;
+  if (!f.categories.includes('android.intent.category.BROWSABLE')) return false;
+  const schemes = f.data.map(d => d.scheme).filter((x): x is string => !!x);
+  if (schemes.length === 0) return false;
+  if (schemes.includes('*') || f.data.some(d => d.host === '*')) return false;
+  const web = schemes.some(sc => /^https?$/i.test(sc));
+  return !web || f.data.some(d => !!d.host);
+}
+
+/**
+ * Intent filters the platform or the app's purpose requires to be reachable from other apps: the launcher
+ * entry, share targets (SEND / SEND_MULTIPLE), home-screen widget actions, the system settings entry
+ * (APPLICATION_PREFERENCES), FCM message delivery, and specific VIEW + BROWSABLE deep links.
+ */
+function isPlatformRequiredFilter(f: IntentFilterInfo): boolean {
+  if (f.actions.length === 0) return false;
+  const only = (test: (a: string) => boolean) => f.actions.every(test);
+  return (
+    (f.actions.includes('android.intent.action.MAIN') && f.categories.includes('android.intent.category.LAUNCHER')) ||
+    only(a => SHARE_ACTIONS.has(a)) ||
+    only(a => a.startsWith('android.appwidget.action.')) ||
+    only(a => a === 'android.intent.action.APPLICATION_PREFERENCES') ||
+    only(a => a === 'com.google.firebase.MESSAGING_EVENT') ||
+    isSpecificDeepLink(f)
+  );
+}
+
+/** SDK components that must be exported for their own protocol to work (no filter-based proof needed) */
+const KNOWN_SDK_COMPONENTS = new Set([
+  'com.facebook.CustomTabActivity',
+  'com.google.firebase.messaging.FirebaseMessagingService',
+]);
+
+/**
+ * An exported activity, service or receiver whose reachability is required: it is a known SDK component, or
+ * it has at least one intent filter and every filter is platform-required. Providers are never exempt, and an
+ * exported component without any intent filter stays a finding.
+ */
+function isPlatformRequiredComponent(el: ManifestElement): boolean {
+  if (el.tag === 'provider') return false;
+  const name = attrValue(el.openTag, 'android:name');
+  if (name && KNOWN_SDK_COMPONENTS.has(name)) return true;
+  const filters = parseIntentFilters(el.text);
+  return filters.length > 0 && filters.every(isPlatformRequiredFilter);
+}
+
 const androidDebuggableRule: Rule = {
   id: 'ANDROID_DEBUGGABLE_ENABLED',
   description: 'android:debuggable="true" in production manifest',
@@ -176,6 +258,8 @@ const androidExportedComponentRule: Rule = {
       // The launcher activity has to be exported
       if (el.tag.startsWith('activity') && isLauncherComponent(el.text)) continue;
       if (attrValue(el.openTag, 'android:permission') !== undefined) continue;
+      // share targets, widget actions, the settings entry, SDK components and specific deep links must be exported
+      if (isPlatformRequiredComponent(el)) continue;
 
       findings.push({
         ruleId: 'ANDROID_EXPORTED_COMPONENT',
@@ -209,25 +293,22 @@ const androidIntentFilterTooPermissiveRule: Rule = {
       { action: 'android.intent.action.SENDTO', category: null, risk: 'Can be invoked with arbitrary data' },
     ];
 
-    for (const { action, category, risk } of dangerousIntents) {
-      if (context.xmlContent.includes(action)) {
-        const intentFilterPattern = /<intent-filter[\s\S]*?<\/intent-filter>/gi;
-        const matches = context.xmlContent.matchAll(intentFilterPattern);
-
-        for (const match of matches) {
-          const filterContent = match[0];
-          
-          if (filterContent.includes(action) && (!category || filterContent.includes(category))) {
-            findings.push({
-              ruleId: 'ANDROID_INTENT_FILTER_PERMISSIVE',
-              description: `Permissive intent filter with ${action}: ${risk}`,
-              severity: Severity.MEDIUM,
-              filePath: context.filePath,
-              line: getLineNumber(context.xmlContent, match.index ?? 0),
-              suggestion: 'Validate all incoming intents and restrict with custom permissions if external access is not required.',
-            });
-          }
-        }
+    // comments are blanked (offsets kept): a commented-out filter is not an exposure
+    const xml = stripXmlComments(context.xmlContent);
+    for (const filter of parseIntentFilters(xml)) {
+      // launcher, share targets, widget / settings actions, FCM and specific deep links are meant to be reachable
+      if (isPlatformRequiredFilter(filter)) continue;
+      for (const { action, category, risk } of dangerousIntents) {
+        if (!filter.actions.includes(action) || (category && !filter.categories.includes(category))) continue;
+        findings.push({
+          ruleId: 'ANDROID_INTENT_FILTER_PERMISSIVE',
+          confidence: 'medium',
+          description: `Permissive intent filter with ${action}: ${risk}`,
+          severity: Severity.MEDIUM,
+          filePath: context.filePath,
+          line: getLineNumber(xml, filter.index),
+          suggestion: 'Validate all incoming intents and restrict with custom permissions if external access is not required.',
+        });
       }
     }
 
@@ -256,7 +337,8 @@ const androidUnprotectedBroadcastReceiverRule: Rule = {
       const isExported = exportedAttr === 'true' ||
                         (exportedAttr === undefined && receiver.text.includes('<intent-filter'));
 
-      if (isExported && !hasPermission) {
+      // widget updates and FCM delivery are sent by the platform: the receiver has to be exported
+      if (isExported && !hasPermission && !isPlatformRequiredComponent(receiver)) {
         findings.push({
           ruleId: 'ANDROID_UNPROTECTED_RECEIVER',
           description: 'Broadcast receiver is exported without permission - can be triggered by malicious apps',
@@ -572,6 +654,7 @@ const androidMissingNetworkSecurityConfigRule: Rule = {
       const line = app ? getLineNumber(xml, app.index) : undefined;
       findings.push({
         ruleId: 'ANDROID_MISSING_NETWORK_SECURITY_CONFIG',
+        confidence: 'medium',
         description: 'Network-enabled app without network_security_config.xml - missing certificate pinning and cleartext traffic control',
         severity: Severity.MEDIUM,
         filePath: context.filePath,
@@ -581,6 +664,53 @@ const androidMissingNetworkSecurityConfigRule: Rule = {
       });
     }
 
+    return findings;
+  },
+};
+
+const FILE_PROVIDER_PATH_TAGS = ['root-path', 'files-path', 'cache-path', 'external-path', 'external-files-path', 'external-cache-path', 'external-media-path'];
+
+const androidFileProviderBroadPathsRule: Rule = {
+  id: 'ANDROID_FILEPROVIDER_BROAD_PATHS',
+  description: 'FileProvider paths expose a whole directory tree',
+  severity: Severity.HIGH,
+  fileTypes: ['**/res/xml/*.xml'],
+  apply: async (context: RuleContext): Promise<Finding[]> => {
+    const findings: Finding[] = [];
+    if (!context.xmlContent) return findings;
+    const xml = stripXmlComments(context.xmlContent);
+    // Only FileProvider path files: the root element is <paths> (other res/xml files are not examined)
+    if (!/^\s*(?:<\?xml[^>]*\?>\s*)?<paths[\s>/]/.test(xml)) return findings;
+
+    const child = new RegExp(`<(${FILE_PROVIDER_PATH_TAGS.join('|')})(?=[\\s>/])((?:"[^"]*"|'[^']*'|[^>"'])*)>`, 'g');
+    for (let m = child.exec(xml); m; m = child.exec(xml)) {
+      const tag = m[1];
+      const path = /\bpath\s*=\s*(?:"([^"]*)"|'([^']*)')/.exec(m[2]);
+      const pathValue = path ? (path[1] ?? path[2]).trim() : undefined;
+      const line = getLineNumber(xml, m.index);
+      let severity: Severity;
+      let description: string;
+      if (tag === 'root-path') {
+        severity = Severity.HIGH;
+        description = '<root-path> in a FileProvider paths file makes the whole file system shareable through the provider';
+      } else if (pathValue !== undefined && /^(?:\.\/?|\/)$/.test(pathValue)) {
+        severity = tag === 'external-path' ? Severity.MEDIUM : Severity.LOW;
+        description = `<${tag} path="${pathValue}"> shares the entire directory instead of a subfolder`;
+      } else {
+        continue;
+      }
+      findings.push({
+        ruleId: 'ANDROID_FILEPROVIDER_BROAD_PATHS',
+        description,
+        severity,
+        confidence: tag === 'root-path' ? 'high' : 'medium',
+        filePath: context.filePath,
+        line,
+        snippet: extractSnippet(context.xmlContent, line, 1),
+        reason: 'A content URI that the app grants (or a mistake in the provider configuration) then reaches every file under that directory, not just the file meant to be shared.',
+        suggestion: 'Name the narrowest subfolder in `path` (for example a dedicated "shared/" directory) and keep files meant for sharing there. Avoid <root-path>.',
+      });
+    }
     return findings;
   },
 };
@@ -599,5 +729,6 @@ export const androidRules: RuleGroup = {
     androidTaskAffinityVulnerabilityRule,
     androidWebviewDebugEnabledRule,
     androidMissingNetworkSecurityConfigRule,
+    androidFileProviderBroadPathsRule,
   ],
 };

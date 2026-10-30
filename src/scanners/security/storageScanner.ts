@@ -4,6 +4,7 @@ import type { Rule, RuleContext, RuleGroup } from '../../types/ruleTypes.js';
 import { Severity, type Finding } from '../../types/findings.js';
 import { containsSensitiveKeyword, getLineNumber, extractSnippet } from '../../utils/stringUtils.js';
 import { RuleCategory } from '../../types/ruleTypes.js';
+import { propertyKeyName } from '../../utils/identifierUtils.js';
 import {
   API_SECRET_PATTERNS,
   hasNonSecretQualifier,
@@ -123,7 +124,7 @@ function resolveString(node: any, scope: any, depth = 0): string | null {
         if (obj?.type !== 'ObjectExpression') return null;
         for (const prop of obj.properties) {
           if (prop.type !== 'ObjectProperty') continue;
-          const k = prop.key.type === 'Identifier' ? prop.key.name : prop.key.value;
+          const k = propertyKeyName(prop);
           if (k === propName) return resolveString(prop.value, binding.scope, depth + 1);
         }
       } else if (binding.path.isTSEnumDeclaration?.()) {
@@ -307,10 +308,10 @@ function findAsyncStorageWrites(ast: any): StorageWrite[] {
         path.get('init.properties').forEach((propPath: any) => {
           const prop = propPath.node;
           if (prop.type === 'ObjectProperty' && ['ArrowFunctionExpression', 'FunctionExpression'].includes(prop.value.type)) {
-            const k = prop.key.type === 'Identifier' ? prop.key.name : prop.key.value;
+            const k = propertyKeyName(prop);
             registerWrapper(`${id.name}.${k}`, prop.value, propPath.get('value'));
           } else if (prop.type === 'ObjectMethod') {
-            const k = prop.key.type === 'Identifier' ? prop.key.name : prop.key.value;
+            const k = propertyKeyName(prop);
             registerWrapper(`${id.name}.${k}`, prop, propPath);
           }
         });
@@ -370,6 +371,7 @@ const asyncStorageSensitiveKeyRule: Rule = {
       const line = getLineNumber(context.fileContent, node.start || 0);
       findings.push({
         ruleId: 'ASYNCSTORAGE_SENSITIVE_KEY',
+        confidence: 'medium',
         description: `AsyncStorage storing sensitive key: "${key}"`,
         severity: Severity.HIGH,
         filePath: context.filePath,
@@ -397,6 +399,7 @@ const asyncStoragePiiDataRule: Rule = {
       const line = getLineNumber(context.fileContent, node.start || 0);
       findings.push({
         ruleId: 'ASYNCSTORAGE_PII_DATA',
+        confidence: 'low',
         description: `AsyncStorage storing PII data with key: "${key}"`,
         severity: Severity.HIGH,
         filePath: context.filePath,
@@ -585,7 +588,7 @@ const reduxPersistNoEncryptionRule: Rule = {
             let usesSecureStorage = false;
 
             configArg.properties.forEach((prop: any) => {
-              const keyName = prop.key && (prop.key.name ?? prop.key.value);
+              const keyName = propertyKeyName(prop);
               if (keyName === 'transforms') {
                 hasTransforms = true;
               }
@@ -612,6 +615,7 @@ const reduxPersistNoEncryptionRule: Rule = {
 
               findings.push({
                 ruleId: 'REDUX_PERSIST_NO_ENCRYPTION',
+                confidence: 'medium',
                 description: 'Redux persist storing sensitive reducers without encryption transforms',
                 severity: Severity.MEDIUM,
                 filePath: context.filePath,
@@ -800,7 +804,7 @@ const mmkvNoEncryptionRule: Rule = {
       
       return configArg.properties.some((prop: any) => {
         if (!prop.key) return false;
-        const keyName = prop.key.name || (prop.key.type === 'StringLiteral' ? prop.key.value : null);
+        const keyName = propertyKeyName(prop);
         return keyName === 'encryptionKey';
       });
     };

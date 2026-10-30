@@ -9,7 +9,7 @@ export interface FileGroup {
   plistFiles: string[];
   /** `.env*` files that are tracked by git (ignored local env files are never reported) */
   envFiles: string[];
-  /** `build.gradle`, `build.gradle.kts` and git-tracked `gradle.properties` */
+  /** `build.gradle[.kts]`, `settings.gradle[.kts]` and git-tracked `gradle.properties` */
   gradleFiles: string[];
   /** Git-tracked `.npmrc` / `.yarnrc.yml` */
   registryFiles: string[];
@@ -47,6 +47,8 @@ const COLLECTED_FILE_NAMES = new Set([
   'Info.plist',
   'build.gradle',
   'build.gradle.kts',
+  'settings.gradle',
+  'settings.gradle.kts',
   'gradle.properties',
   '.npmrc',
   '.yarnrc.yml',
@@ -98,7 +100,7 @@ export async function walkProjectFiles(
     xml: ['**/AndroidManifest.xml', '**/network_security_config.xml'],
     plist: ['**/Info.plist'],
     env: ['**/.env', '**/.env.*'],
-    gradle: ['**/build.gradle', '**/build.gradle.kts'],
+    gradle: ['**/build.gradle', '**/build.gradle.kts', '**/settings.gradle', '**/settings.gradle.kts'],
     gradleProperties: ['**/gradle.properties'],
     registry: ['**/.npmrc', '**/.yarnrc.yml'],
     credentials: [

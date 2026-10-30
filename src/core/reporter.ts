@@ -1,7 +1,7 @@
 import chalk from 'chalk';
 import boxen from 'boxen';
 import gradient from 'gradient-string';
-import type { Finding, Severity, ScanResult } from '../types/findings.js';
+import type { Finding, Severity, ScanResult, OwaspReport, ControlStatus } from '../types/findings.js';
 import { SEVERITY_THRESHOLDS, TERMINAL } from '../constants.js';
 
 export interface ReporterOptions {
@@ -14,12 +14,14 @@ export interface ReporterOptions {
 }
 
 const SEVERITY_ICONS = {
+  CRITICAL: '🟣',
   HIGH: '🔴',
   MEDIUM: '🟡',
   LOW: '🔵',
 } as const;
 
 const SEVERITY_COLORS = {
+  CRITICAL: chalk.magenta,
   HIGH: chalk.red,
   MEDIUM: chalk.yellow,
   LOW: chalk.blue,
@@ -67,21 +69,10 @@ export class Reporter {
 
     this.printSecurityHeader(findings.length);
 
-    const grouped = this.groupBySeverity(findings);
-
-    if (grouped.HIGH.length > 0) {
-      this.printSeverityGroup('HIGH', grouped.HIGH, chalk.red);
-    }
-
-    if (grouped.MEDIUM.length > 0) {
-      this.printSeverityGroup('MEDIUM', grouped.MEDIUM, chalk.yellow);
-    }
-
-    if (grouped.LOW.length > 0) {
-      this.printSeverityGroup('LOW', grouped.LOW, chalk.blue);
-    }
+    this.printSeverityGroups(findings);
 
     this.printDetailedSummary(result);
+    this.printOwaspCoverage(result);
     this.printReportFooter(result);
   }
 
@@ -102,25 +93,21 @@ export class Reporter {
     this.printSecurityHeader(findings.length);
     console.log('\n');
 
-    const grouped = this.groupBySeverity(findings);
-
-    if (grouped.HIGH.length > 0) {
-      this.printSeverityGroup('HIGH', grouped.HIGH, chalk.red);
-    }
-
-    // Print MEDIUM severity
-    if (grouped.MEDIUM.length > 0) {
-      this.printSeverityGroup('MEDIUM', grouped.MEDIUM, chalk.yellow);
-    }
-
-    // Print LOW severity
-    if (grouped.LOW.length > 0) {
-      this.printSeverityGroup('LOW', grouped.LOW, chalk.blue);
-    }
+    this.printSeverityGroups(findings);
 
     console.log('\n');
     this.printSummary(result);
+    this.printOwaspCoverage(result);
     this.printReportFooter(result);
+  }
+
+  private printSeverityGroups(findings: Finding[]): void {
+    const grouped = this.groupBySeverity(findings);
+    for (const severity of ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'] as const) {
+      if (grouped[severity].length > 0) {
+        this.printSeverityGroup(severity, grouped[severity], SEVERITY_COLORS[severity]);
+      }
+    }
   }
 
   private groupBySeverity(findings: Finding[]): Record<Severity, Finding[]> {
@@ -130,6 +117,7 @@ export class Reporter {
         return acc;
       },
       {
+        CRITICAL: [] as Finding[],
         HIGH: [] as Finding[],
         MEDIUM: [] as Finding[],
         LOW: [] as Finding[],
@@ -153,6 +141,7 @@ export class Reporter {
 
     // Get background colors for each severity
     const backgrounds = {
+      CRITICAL: { bg: chalk.bgRgb(60, 20, 55), text: chalk.rgb(255, 190, 240), badge: chalk.bgRgb(150, 30, 130).white.bold },
       HIGH: { bg: chalk.bgRgb(60, 20, 20), text: chalk.rgb(255, 200, 200), badge: chalk.bgRgb(180, 40, 40).white.bold },
       MEDIUM: { bg: chalk.bgRgb(70, 50, 15), text: chalk.rgb(255, 220, 150), badge: chalk.bgRgb(200, 120, 30).black.bold },
       LOW: { bg: chalk.bgRgb(70, 65, 15), text: chalk.rgb(255, 245, 150), badge: chalk.bgRgb(200, 180, 40).black.bold },
@@ -181,9 +170,18 @@ export class Reporter {
       const locationLength = location.length + lineInfo.length + 6 + debugLength;
       const locPadding = ' '.repeat(Math.max(0, contentWidth - locationLength));
       console.log(theme.bg(locationText + locPadding));
+      if (finding.standards) {
+        console.log(chalk.gray(`      OWASP: ${this.formatStandards(finding)}`));
+      }
       
       console.log('');
     });
+  }
+
+  /** MASVS-STORAGE-1 · MASWE-0006 · MASTG-TEST-0216 · CWE-212 */
+  private formatStandards(finding: Finding): string {
+    const s = finding.standards!;
+    return [...s.masvs, ...s.maswe, ...s.mastg, ...s.cwe.map(n => `CWE-${n}`)].join(' · ');
   }
 
   private formatFilePath(filePath: string): string {
@@ -223,9 +221,11 @@ export class Reporter {
     
     console.log('');
     console.log(chalk.green.bold('  ✓ NO SECURITY VULNERABILITIES DETECTED'));
-    console.log(chalk.green('  Your React Native app passed all 20 security checks!'));
+    // The MASVS section below must not read like a verdict
+    console.log(chalk.green(result.owasp ? '  rnsec reported no findings.' : '  Your React Native app passed all 20 security checks!'));
     console.log('');
     this.printDetailedSummary(result);
+    this.printOwaspCoverage(result);
     this.printReportFooter(result);
   }
 
@@ -236,6 +236,7 @@ export class Reporter {
 
   private printDetailedSummary(result: ScanResult): void {
     const { findings } = result;
+    const critical = findings.filter(f => f.severity === 'CRITICAL').length;
     const high = findings.filter(f => f.severity === 'HIGH').length;
     const medium = findings.filter(f => f.severity === 'MEDIUM').length;
     const low = findings.filter(f => f.severity === 'LOW').length;
@@ -247,11 +248,13 @@ export class Reporter {
     console.log('');
     
     // Visual dashboard
+    const criticalBar = critical > 0 ? '█'.repeat(Math.min(critical, SEVERITY_THRESHOLDS.MAX_BAR_LENGTH)) : '─';
     const highBar = high > 0 ? '█'.repeat(Math.min(high, SEVERITY_THRESHOLDS.MAX_BAR_LENGTH)) : '─';
     const medBar = medium > 0 ? '█'.repeat(Math.min(medium, SEVERITY_THRESHOLDS.MAX_BAR_LENGTH)) : '─';
     const lowBar = low > 0 ? '█'.repeat(Math.min(low, SEVERITY_THRESHOLDS.MAX_BAR_LENGTH)) : '─';
     
     console.log(chalk.bold.white('  Security Issues:'));
+    console.log(`    🟣 ${chalk.magenta.bold('Critical:'.padEnd(10))} ${critical.toString().padStart(3)} ${critical > 0 ? chalk.magenta(criticalBar) : chalk.gray(criticalBar)}`);
     console.log(`    🔴 ${chalk.red.bold('High:'.padEnd(10))} ${high.toString().padStart(3)} ${high > 0 ? chalk.red(highBar) : chalk.gray(highBar)}`);
     console.log(`    🟡 ${chalk.yellow.bold('Medium:'.padEnd(10))} ${medium.toString().padStart(3)} ${medium > 0 ? chalk.yellow(medBar) : chalk.gray(medBar)}`);
     console.log(`    🔵 ${chalk.blue.bold('Low:'.padEnd(10))} ${low.toString().padStart(3)} ${low > 0 ? chalk.blue(lowBar) : chalk.gray(lowBar)}`);
@@ -267,12 +270,12 @@ export class Reporter {
     console.log('');
 
     // Risk assessment
-    if (findings.length > 0 && high > 0) {
-      const riskLevel = high >= SEVERITY_THRESHOLDS.RISK_CRITICAL ? 'CRITICAL' 
+    if (findings.length > 0 && (critical > 0 || high > 0)) {
+      const riskLevel = critical > 0 || high >= SEVERITY_THRESHOLDS.RISK_CRITICAL ? 'CRITICAL' 
         : high >= SEVERITY_THRESHOLDS.RISK_HIGH ? 'HIGH' 
         : 'ELEVATED';
       console.log(chalk.red.bold(`  ⚠️  RISK LEVEL: ${riskLevel}`));
-      console.log(chalk.red('  Immediate action required. High severity vulnerabilities detected.'));
+      console.log(chalk.red('  Immediate action required. Critical or high severity vulnerabilities detected.'));
     } else if (findings.length > 0 && medium > 0) {
       console.log(chalk.yellow.bold('  ⚠️  RISK LEVEL: MODERATE'));
       console.log(chalk.yellow('  Review and address security issues when possible.'));
@@ -284,6 +287,37 @@ export class Reporter {
       console.log(chalk.green('  No security vulnerabilities detected. Great job!'));
     }
     
+    console.log('');
+  }
+
+  /** MASVS coverage after the findings (`--owasp`) */
+  private printOwaspCoverage(result: ScanResult): void {
+    const owasp = result.owasp;
+    if (!owasp) return;
+    const { summary } = owasp;
+    const LABEL: Record<ControlStatus, string> = {
+      failed: chalk.red('FAILED'),
+      checked: chalk.green('checked'),
+      'checked-heuristic': chalk.cyan('checked (heuristic)'),
+      'not-applicable': chalk.gray('not applicable'),
+      'not-assessed': chalk.yellow('not assessed'),
+    };
+
+    console.log(chalk.bold.white(`  OWASP MASVS ${owasp.standards.masvs} coverage (static analysis only)`));
+    console.log(chalk.gray('  ' + '─'.repeat(TERMINAL.SEPARATOR_LENGTH)));
+    console.log(`  ${summary.automatedRules} automated rules map to MASVS controls in this project`);
+    console.log(
+      `  ${summary.controls} controls: ${summary.failed} failed, ${summary.checked} checked, ` +
+        `${summary.checkedHeuristic} checked (heuristic), ${summary.notApplicable} not applicable, ${summary.notAssessed} not assessed`
+    );
+    console.log('');
+    for (const c of owasp.controls) {
+      const failing = c.status === 'failed' ? ` ${chalk.gray(`${c.findings} finding${c.findings === 1 ? '' : 's'}`)}` : '';
+      const rules = c.rules.length > 0 ? chalk.gray(` ${c.rules.length} rule${c.rules.length === 1 ? '' : 's'}`) : '';
+      console.log(`    ${c.id.padEnd(20)} ${LABEL[c.status]}${failing}${rules}`);
+    }
+    console.log('');
+    console.log(chalk.gray(`  ${owasp.disclaimer}`));
     console.log('');
   }
 
@@ -365,6 +399,7 @@ export class Reporter {
     console.log('');
 
     const grouped = {
+      CRITICAL: rules.filter(r => r.severity === 'CRITICAL'),
       HIGH: rules.filter(r => r.severity === 'HIGH'),
       MEDIUM: rules.filter(r => r.severity === 'MEDIUM'),
       LOW: rules.filter(r => r.severity === 'LOW'),
@@ -390,5 +425,19 @@ export class Reporter {
     console.log(chalk.gray('  ─'.repeat(TERMINAL.SEPARATOR_LENGTH)));
     console.log(chalk.cyan.bold(`  📊 Total: ${rules.length} security rules loaded`));
     console.log('');
+  }
+
+  /** `rules --owasp`: one aligned row per rule with its MASVS and MASWE ids ("-" when unmapped) */
+  listRulesOwasp(rules: Array<{ id: string; title: string; severity: Severity; masvs: string[]; maswe: string[] }>): void {
+    const cell = (ids: string[]) => (ids.length > 0 ? ids.join(',') : '-');
+    const rows = rules.map(r => [r.id, r.severity, cell(r.masvs), cell(r.maswe), r.title]);
+    const header = ['ID', 'SEVERITY', 'MASVS', 'MASWE', 'TITLE'];
+    const widths = header.map((h, i) => Math.max(h.length, ...rows.map(r => r[i].length)));
+    const line = (cols: string[]) =>
+      cols.map((c, i) => (i === cols.length - 1 ? c : c.padEnd(widths[i]))).join('  ');
+    console.log(chalk.bold(line(header)));
+    rows.forEach(r => console.log(line(r)));
+    console.log('');
+    console.log(`${rules.length} rules. "-" means the rule has no MASVS/MASWE mapping.`);
   }
 }

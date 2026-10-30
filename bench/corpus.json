@@ -1,0 +1,13 @@
+{
+  "note": "ignite had no SHA in the roadmap; its sha is the default-branch HEAD first scanned on 2026-10-30. Pinned apps for the precision baseline. sha is the full commit; short is the SHA quoted in ROADMAP-1.5.0.md. path is the subpath that is scanned.",
+  "apps": [
+    { "name": "social-app", "url": "https://github.com/bluesky-social/social-app", "short": "4e4ad9c", "sha": "4e4ad9c5f5cc584bd06473ab6f16318fd0bd8465", "path": "." },
+    { "name": "mattermost-mobile", "url": "https://github.com/mattermost/mattermost-mobile", "short": "8a9427f", "sha": "8a9427f25ad9f16ed333b1865eff9c4b057cb093", "path": "." },
+    { "name": "Rocket.Chat.ReactNative", "url": "https://github.com/RocketChat/Rocket.Chat.ReactNative", "short": "6a79efb", "sha": "6a79efb5ea47c446b8362fad64ec2cecfa64e146", "path": "." },
+    { "name": "BlueWallet", "url": "https://github.com/BlueWallet/BlueWallet", "short": "9ab299f", "sha": "9ab299f32770e51d7839ff9bd5f25f97bba68053", "path": "." },
+    { "name": "metamask-mobile", "url": "https://github.com/MetaMask/metamask-mobile", "short": "c0b6d4a", "sha": "c0b6d4a68364a4f6c9f4e242cc9150af25af09ae", "path": "." },
+    { "name": "eigen", "url": "https://github.com/artsy/eigen", "short": "5eb7fff", "sha": "5eb7fffd0ae2ff554080774b1a261b2ce8ecd36f", "path": "." },
+    { "name": "joplin", "url": "https://github.com/laurent22/joplin", "short": "94168d3", "sha": "94168d33d6a9564006ab8254b990d365de263ef7", "path": "packages/app-mobile" },
+    { "name": "ignite", "url": "https://github.com/infinitered/ignite", "short": null, "sha": "e829d2f922c5568a59a77bfb6232aeb500be3f13", "path": "boilerplate" }
+  ]
+}

@@ -141,7 +141,7 @@
     
     .summary {
       display: grid;
-      grid-template-columns: repeat(4, 1fr);
+      grid-template-columns: repeat(5, 1fr);
       gap: 1px;
       background: #1a1f2e;
       border: 1px solid #1a1f2e;
@@ -213,6 +213,7 @@
       margin-bottom: 12px;
     }
     
+    .summary-card.critical .number { color: #d946ef; }
     .summary-card.high .number { color: #ef4444; }
     .summary-card.medium .number { color: #f97316; }
     .summary-card.low .number { color: #eab308; }
@@ -320,6 +321,17 @@
       height: 12px;
     }
     
+    .severity-badge.critical {
+      background: rgba(217, 70, 239, 0.15);
+      color: #d946ef;
+      border: 1px solid rgba(217, 70, 239, 0.3);
+    }
+
+    .severity-badge.critical .severity-icon {
+      background: #d946ef;
+      color: #ffffff;
+    }
+
     .severity-badge.high {
       background: rgba(239, 68, 68, 0.15);
       color: #ef4444;
@@ -544,6 +556,11 @@
       padding-left: 17px;
     }
 
+    .code-line.highlighted.critical {
+      background: rgba(217, 70, 239, 0.15);
+      border-left-color: #d946ef;
+    }
+
     .code-line.highlighted.medium {
       background: rgba(249, 115, 22, 0.15);
       border-left-color: #f97316;
@@ -568,6 +585,10 @@
     .code-line.highlighted .line-number {
       color: #ef4444;
       font-weight: 700;
+    }
+
+    .code-line.highlighted.critical .line-number {
+      color: #d946ef;
     }
 
     .code-line.highlighted.medium .line-number {

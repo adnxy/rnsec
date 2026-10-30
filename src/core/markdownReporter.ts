@@ -51,6 +51,7 @@ Your React Native app passed all security checks!
 ### 📊 Scan Summary
 | Metric | Value |
 |--------|-------|
+| 🟣 Critical Severity | 0 |
 | 🔴 High Severity | 0 |
 | 🟡 Medium Severity | 0 |
 | 🔵 Low Severity | 0 |
@@ -76,11 +77,12 @@ Great job! No security vulnerabilities detected.
   private generateVulnerabilityReport(result: ScanResult, comparison?: ScanComparison): string {
     const { findings, scannedFiles, duration, timestamp } = result;
     
+    const critical = findings.filter(f => f.severity === 'CRITICAL').length;
     const high = findings.filter(f => f.severity === 'HIGH').length;
     const medium = findings.filter(f => f.severity === 'MEDIUM').length;
     const low = findings.filter(f => f.severity === 'LOW').length;
     
-    const riskLevel = high >= 3 ? '🚨 CRITICAL' 
+    const riskLevel = critical >= 1 || high >= 3 ? '🚨 CRITICAL' 
       : high >= 1 ? '⚠️ HIGH' 
       : medium >= 3 ? '⚠️ MODERATE'
       : medium >= 1 ? 'ℹ️ LOW'
@@ -93,6 +95,7 @@ ${riskLevel} **${findings.length} security ${findings.length === 1 ? 'issue' : '
 ### 📊 Issue Summary
 | Severity | Count | Status |
 |----------|-------|--------|
+| 🟣 Critical | ${critical} | ${critical > 0 ? '❌ Fix before merging' : '✅ None'} |
 | 🔴 High | ${high} | ${high > 0 ? '❌ Needs attention' : '✅ None'} |
 | 🟡 Medium | ${medium} | ${medium > 0 ? '⚠️ Review recommended' : '✅ None'} |
 | 🔵 Low | ${low} | ${low > 0 ? 'ℹ️ Address when possible' : '✅ None'} |
@@ -114,6 +117,10 @@ ${riskLevel} **${findings.length} security ${findings.length === 1 ? 'issue' : '
     // Group findings by severity
     const grouped = this.groupBySeverity(findings);
     
+    if (grouped.CRITICAL.length > 0) {
+      markdown += this.generateSeveritySection('🟣 Critical Severity', grouped.CRITICAL);
+    }
+
     if (grouped.HIGH.length > 0) {
       markdown += this.generateSeveritySection('🔴 High Severity', grouped.HIGH);
     }
@@ -129,7 +136,7 @@ ${riskLevel} **${findings.length} security ${findings.length === 1 ? 'issue' : '
     markdown += `---
 
 ### 🎯 Risk Assessment
-${this.generateRiskAssessment(high, medium, low)}
+${this.generateRiskAssessment(critical, high, medium, low)}
 
 ---
 
@@ -145,7 +152,8 @@ ${this.generateRiskAssessment(high, medium, low)}
     section += `<details>\n<summary>Click to expand ${findings.length} ${findings.length === 1 ? 'issue' : 'issues'}</summary>\n\n`;
     
     findings.forEach((finding, index) => {
-      const icon = finding.severity === 'HIGH' ? '🔴' : 
+      const icon = finding.severity === 'CRITICAL' ? '🟣' :
+                   finding.severity === 'HIGH' ? '🔴' : 
                    finding.severity === 'MEDIUM' ? '🟡' : '🔵';
       
       const location = finding.filePath ? `\`${this.formatFilePath(finding.filePath)}${finding.line ? `:${finding.line}` : ''}\`` : '';
@@ -174,8 +182,10 @@ ${this.generateRiskAssessment(high, medium, low)}
     return section;
   }
 
-  private generateRiskAssessment(high: number, medium: number, low: number): string {
-    if (high >= 3) {
+  private generateRiskAssessment(critical: number, high: number, medium: number, low: number): string {
+    if (critical >= 1) {
+      return '🚨 **CRITICAL RISK** - Critical-severity vulnerabilities detected. Fix before merging.';
+    } else if (high >= 3) {
       return '🚨 **CRITICAL RISK** - Multiple high-severity vulnerabilities detected. Immediate action required before merging.';
     } else if (high >= 1) {
       return '⚠️ **HIGH RISK** - High-severity vulnerabilities detected. Address before merging if possible.';
@@ -196,6 +206,7 @@ ${this.generateRiskAssessment(high, medium, low)}
         return acc;
       },
       {
+        CRITICAL: [] as Finding[],
         HIGH: [] as Finding[],
         MEDIUM: [] as Finding[],
         LOW: [] as Finding[],

@@ -56,7 +56,7 @@ test('WEAK_HASH_ALGORITHM: security context stays HIGH, checksums/cache keys dro
 
 test('INSECURE_RANDOM: only values flowing into token/nonce/otp/... names', () => {
   const r = scan('net-insecure-random');
-  assert.deepEqual(lines(r, 'INSECURE_RANDOM'), [29, 33, 36, 38, 41, 44, 47, 53, 57]); // 53/57: generateToken accumulator and Array.from generator; retryTokenFetch/refreshTokenDelay/generateAnimationFrame stay clean
+  assert.deepEqual(lines(r, 'INSECURE_RANDOM'), [29, 33, 36, 38, 41, 44, 47, 53, 57, 89, 92]); // 89/92: a returned Date.now() and a BigInt(Math.floor(Math.random())) conversion in a generator; isTokenExpired, elapsed-time arithmetic, a returned timestamp, a random test and values passed through an unrelated call stay clean; 53/57: generateToken accumulator and Array.from generator; retryTokenFetch/refreshTokenDelay/generateAnimationFrame stay clean
   const date = byRule(r, 'INSECURE_RANDOM').find(f => f.line === 47);
   assert.equal(date.severity, 'MEDIUM');
   assert.equal(date.confidence, 'medium');
@@ -102,14 +102,23 @@ test('WEAK_CIPHER_OR_MODE: ECB/DES/3DES/RC4 and constant IVs found, AES-CBC/GCM 
 test('SENSITIVE_DATA_IN_ERROR_MESSAGES: AST based, alerts with error details only', () => {
   const r = scan('net-error-messages');
   // safe: console.log(error.message), generic alerts, a comment mentioning Alert.alert, stderr.message
-  assert.deepEqual(lines(r, 'SENSITIVE_DATA_IN_ERROR_MESSAGES'), [25, 32, 37]);
+  // reported: Alert in catch (25, 32), Toast / Alert in a .catch callback (41, 45), network response (48),
+  // logged request headers (51; a logged secret field is SENSITIVE_LOGGING's, which wins the dedup), whole caught error to a toast (71)
+  // not reported: console.error(error) / error.message / error.code (plain logging), constant toast and response, a bare `error` string passed to a toast
+  assert.deepEqual(lines(r, 'SENSITIVE_DATA_IN_ERROR_MESSAGES'), [25, 32, 41, 45, 48, 51, 71]);
   const by = Object.fromEntries(byRule(r, 'SENSITIVE_DATA_IN_ERROR_MESSAGES').map(f => [f.line, f]));
   assert.equal(by[25].confidence, undefined, 'Alert.alert(e.message) in catch(e) is a real exposure');
-  assert.equal(by[37].confidence, 'low', 'console.error(error) only reaches device logs');
+  assert.equal(by[51].confidence, 'low', 'logged request data only reaches device logs');
+  assert.equal(by[51].severity, 'LOW');
 });
 
 test('TEXT_INPUT_NO_SECURE matches whole words, supports autoComplete, ignores prop spreads', () => {
   const r = scan('auth-textinput');
   const lines = byRule(r, 'TEXT_INPUT_NO_SECURE').map(f => f.line);
   assert.deepEqual(lines, [9, 18], `passport/passwordless/spread must not fire, got ${lines}`);
+});
+
+test('SENSITIVE_DATA_IN_ERROR_MESSAGES: console logging is dropped when release builds strip console, UI sinks stay', () => {
+  const r = scan('net-error-console-stripped');
+  assert.deepEqual(lines(r, 'SENSITIVE_DATA_IN_ERROR_MESSAGES'), [5]);
 });

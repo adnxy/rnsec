@@ -1,0 +1,17 @@
+{
+  "note": "Derived by locating the 11 roadmap TPs in out-plain by rule+file (labels-1.4.0.json is not on disk). Confidence per entry. ATS TPs: the roadmap says 4 (three in app extensions), out-plain has 3 IOS_ATS_DISABLED findings; the 4th could not be located. NSC global cleartext: roadmap says 1 TP among 3 NSC findings, joplin and mattermost both are base-config cleartext, so both are gated; BlueWallet NSC is a LAN/onion domain-config (TBNA, not gated).",
+  "tps": [
+    {"rule":"IOS_ATS_DISABLED","repo":"BlueWallet","file":"ios/Widgets/Info.plist","line":25,"confidence":"high","why":"NSAllowsArbitraryLoads true in the Widgets extension"},
+    {"rule":"IOS_ATS_DISABLED","repo":"mattermost-mobile","file":"ios/Mattermost/Info.plist","line":47,"confidence":"high","why":"NSAllowsArbitraryLoads true in the main app"},
+    {"rule":"IOS_ATS_DISABLED","repo":"mattermost-mobile","file":"ios/MattermostShare/Info.plist","line":44,"confidence":"high","why":"NSAllowsArbitraryLoads true in the share extension"},
+    {"rule":"ANDROID_USER_CA_TRUSTED","repo":"joplin","file":"packages/app-mobile/android/app/src/main/res/xml/network_security_config.xml","line":6,"confidence":"high","why":"base-config trusts user CAs in the release config"},
+    {"rule":"ANDROID_USER_CA_TRUSTED","repo":"mattermost-mobile","file":"android/app/src/main/res/xml/network_security_config.xml","line":8,"confidence":"high","why":"base-config trusts user CAs in the release config"},
+    {"rule":"ANDROID_CLEARTEXT_ENABLED","repo":"mattermost-mobile","file":"android/app/src/main/AndroidManifest.xml","line":57,"confidence":"medium","why":"global cleartext; BlueWallet's manifest hit is TBNA (narrow NSC), so mattermost is the likely TP"},
+    {"rule":"ANDROID_NETWORK_SECURITY_CONFIG_CLEARTEXT","repo":"mattermost-mobile","file":"android/app/src/main/res/xml/network_security_config.xml","line":3,"confidence":"medium","why":"base-config cleartextTrafficPermitted true (global)"},
+    {"rule":"ANDROID_NETWORK_SECURITY_CONFIG_CLEARTEXT","repo":"joplin","file":"packages/app-mobile/android/app/src/main/res/xml/network_security_config.xml","line":3,"confidence":"medium","why":"base-config cleartextTrafficPermitted true (global); only one of joplin/mattermost is the labelled TP"},
+    {"rule":"EXPO_UPDATES_NO_CODE_SIGNING","repo":"eigen","file":"app.json","line":null,"confidence":"high","why":"unsigned Expo OTA updates (only finding of this rule in the corpus)"},
+    {"rule":"CLIPBOARD_SENSITIVE_DATA","repo":"BlueWallet","file":"screen/wallets/WalletExport.tsx","line":125,"confidence":"high","why":"wallet seed copied to the clipboard (eigen's hit is a dev menu, TBNA)"},
+    {"rule":"CUSTOM_CRYPTO_IMPLEMENTATION","repo":"BlueWallet","file":"blue_modules/encryption.ts","line":56,"confidence":"medium","why":"single-iteration MD5 EVP_BytesToKey password KDF in backup encryption; line 56 is encrypt(), line 71 is decrypt(): either may be the labelled one"},
+    {"rule":"CUSTOM_CRYPTO_IMPLEMENTATION","repo":"BlueWallet","file":"blue_modules/encryption.ts","line":71,"confidence":"medium","why":"same KDF, decrypt() side"}
+  ]
+}

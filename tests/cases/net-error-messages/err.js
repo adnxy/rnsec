@@ -36,3 +36,37 @@ export function leakyTemplate(run) {
 export function logError(error) {
   console.error(error);
 }
+export function toastShow(fetchUser) {
+  fetchUser().catch(e => {
+    Toast.show({ type: 'error', text1: e.message });
+  });
+}
+export function promiseAlert(fetchUser) {
+  fetchUser().catch(failure => Alert.alert('Failed', failure.message));
+}
+export function serverReply(res, err) {
+  res.status(500).json({ error: err.stack });
+}
+export function logHeaders(error) {
+  console.error('request failed', error.config.headers);
+}
+export function logToken(error) {
+  console.warn(error.token);
+}
+export function logCode(error) {
+  console.error(error.code, error.status);
+  console.warn('failed', error);
+  console.error(error.message);
+}
+export function constantToast() {
+  Toast.show({ type: 'error', text1: 'Could not load' });
+  res.status(500).json({ error: 'Internal error' });
+}
+export function validationToasts(errors) {
+  errors.map(error => {
+    Toast.show(error, { type: 'warning' });
+  });
+}
+export function bareCaught(load) {
+  load().catch(failure => Toast.show(failure));
+}

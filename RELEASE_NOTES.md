@@ -1,74 +1,76 @@
-# 🚀 rnsec 1.4.0 Release Notes
+# 🚀 rnsec 1.5.0 Release Notes
 
-**Release Date**: October 23, 2026
+**Release Date**: October 30, 2026
 
-rnsec 1.4.0 grows from 87 to **105 security rules**, adds the CI features teams asked for (SARIF for GitHub Code Scanning, baselines, a configurable failure threshold) and removes a lot of false-positive noise. Please read the upgrade notes: some changes make findings appear that were hidden before.
+rnsec 1.5.0 maps its findings to the OWASP Mobile Application Security standards (MASVS, MASWE and MASTG) and adds a MASVS coverage report. It still performs static analysis only: it does not verify MASVS compliance. Please read the upgrade notes: error exit codes changed.
 
-The full list of changes is in the [CHANGELOG](https://github.com/adnxy/rnsec/blob/main/CHANGELOG.md#140---2026-10-23).
+The full list of changes is in the [CHANGELOG](https://github.com/adnxy/rnsec/blob/main/CHANGELOG.md#150---2026-10-30).
 
 ---
 
 ## 🌟 Highlights
 
-### 18 new rules
+### OWASP MASVS, MASWE and MASTG mapping
 
-| Area | Rules |
-|------|-------|
-| Secrets and credentials | `COMMITTED_CREDENTIAL_FILE`, `BUNDLED_ENV_SECRET`, `HARDCODED_BASIC_AUTH_CREDENTIALS`, `EAS_JSON_SECRET_IN_ENV`, `ANDROID_SIGNING_CREDENTIALS_HARDCODED` |
-| Crypto, TLS and auth | `WEAK_CIPHER_OR_MODE`, `JWT_INSECURE_SIGNING`, `OAUTH_INSECURE_FLOW`, `TLS_VALIDATION_DISABLED_ENV` |
-| Storage and injection | `MMKV_UNENCRYPTED_SENSITIVE_DATA`, `SQLITE_QUERY_INJECTION` |
-| Android and iOS config | `ANDROID_NETWORK_SECURITY_CONFIG_CLEARTEXT`, `ANDROID_USER_CA_TRUSTED`, `EXPO_CONFIG_INSECURE_SETTINGS`, `IOS_FILE_SHARING_ENABLED` |
-| WebView and supply chain | `WEBVIEW_ORIGIN_WHITELIST_WILDCARD`, `DEPENDENCY_NONREGISTRY_SOURCE`, `NPM_REGISTRY_CONFIG_INSECURE` |
-
-### Built for CI
+- 103 of the 110 rules are mapped to MASVS 2.1.0 controls, MASWE 1.0.0 weaknesses and MASTG tests. The mapping lives in one table, separate from the detection code.
+- The standards data is a pinned, vendored snapshot (8 MASVS categories including PRIVACY, 24 controls). A test fails if a mapping uses an ID that is not in the snapshot.
+- `--owasp` adds the references to every finding and prints a coverage section. Each of the 24 controls is reported as `failed`, `checked`, `checked (heuristic)`, `not applicable` or `not assessed`. Controls marked `not assessed` need manual or dynamic verification.
+- `rnsec rules --owasp` lists every rule with its MASVS and MASWE references.
 
 ```bash
-# Upload findings to GitHub Code Scanning
-rnsec scan --sarif rnsec.sarif
-
-# Adopt rnsec on an existing codebase: record today's findings, fail only on new ones
-rnsec scan --write-baseline .rnsec-baseline.json
-rnsec scan --baseline .rnsec-baseline.json
-
-# Choose what fails the build: high (default), medium, low or none
-rnsec scan --fail-on medium
+rnsec scan --owasp
+rnsec scan --owasp --format json
+rnsec scan --owasp --format sarif
+rnsec scan --owasp --fail-on high
 ```
 
-- `severityOverrides` in `.rnsec.jsonc` changes a rule's severity; `// rnsec-ignore: RULE_ID reason` silences a single finding.
-- Findings carry a `confidence`; `--min-confidence medium` shows only the more certain ones.
-- `.gitignore` is respected, and the config file may contain comments and trailing commas.
+### Precision
 
-### Less noise
+Fewer false positives. On 8 open-source apps (pinned in `bench/corpus.json`) the default output went from 1460 findings to 524, and to 533 with the four new rules, which added 9 hand-verified true positives. None of the 12 known true positives was lost. Generated bundles and non-app source (scripts, tools, e2e, mocks) are no longer scanned by code-pattern rules, absence checks are one project-level finding, and several rules were tightened. A crash in `INSECURE_WEBSOCKET` that silently dropped files is fixed, and rule exceptions and parse failures are now reported (`Scan incomplete: ...` on stderr, `ruleErrors` / `parseFailures` in the JSON output).
 
-`__DEV__` guards now apply to the guarded code only, public-by-design keys (Firebase web keys, Stripe `pk_`, Sentry DSNs) are LOW, same-line duplicates are merged, and many rules got tighter matching.
+**Caveat:** hand-reviewed samples of removed findings were almost all correct removals, but the remaining findings are mostly "plausible, needs review" rather than confirmed exploitable. Precision as a percentage is not established: it was measured by volume and hand sampling, not on a labelled hold-out set. See [docs/benchmark.md](https://github.com/adnxy/rnsec/blob/main/docs/benchmark.md).
+
+### CI output
+
+- `--format console|json|sarif` prints one machine-readable format to stdout with nothing else mixed in.
+- SARIF now carries MASVS, MASWE, MASTG and CWE tags, a help link per rule and an MASVS taxonomy.
+- `critical` is a new severity, usable with `--fail-on`. It applies to a committed service-account JSON with a real private key and to a `.p8` file containing a PEM private key. Other rules can be raised with `severityOverrides`.
+- Updated GitHub Actions and GitLab CI examples, plus a pre-commit example in `examples/pre-commit/`.
+
+### Rules
+
+- `EXPO_UPDATES_INSECURE_URL`, `EXPO_UPDATES_NO_CODE_SIGNING` and `EXPO_INSECURE_PERMISSIONS` now read static values in `app.config.js|ts`. Values that cannot be established statically are never flagged.
+- New rule `EXPO_PUBLIC_ENV_SECRET` for secrets in `EXPO_PUBLIC_*` variables of committed `.env` files.
+- New rule `TLS_VALIDATION_DISABLED_NATIVE` for certificate or host name validation switched off in Java, Kotlin, Swift and Objective-C code (trust-all managers, always-true host name verifiers, `onReceivedSslError` + `proceed()`, challenge handlers that trust any server).
+- New rule `GRADLE_INSECURE_REPOSITORY` for Maven repositories over plain HTTP or with `allowInsecureProtocol = true`; `settings.gradle[.kts]` files are now scanned.
+- New rule `ANDROID_FILEPROVIDER_BROAD_PATHS` for FileProvider paths files with `<root-path>` or whole-directory paths.
+- New rule `FIREBASE_RULES_OPEN_ACCESS` for Firestore, Storage and Realtime Database rules that allow everyone to read or write.
 
 ---
 
 ## ⚠️ Upgrade notes
 
-- **More findings can appear, including HIGH ones.** One `__DEV__ &&` used to hide every finding in a file. If your CI now fails, record a baseline with `--write-baseline`.
-- **`.gitignore` is respected.** Findings in git-ignored files disappear. Use `--no-gitignore` to scan them.
-- **`--json` stdout is pure JSON.** Informational lines moved to stderr, and piped output is no longer cut off at 8 KB.
-- **Severity changes:** public-by-design keys, Stripe `sk_test_` keys and `NO_REQUEST_TIMEOUT` are LOW; `ROOT_JAILBREAK_DETECTION_ABSENT` and `MISSING_RUNTIME_INTEGRITY_CHECKS` are LOW with low confidence and only fire for payments, banking, crypto-wallet and health apps; `EXPO_SECURE_STORE_WEAK_OPTIONS` no longer flags `AFTER_FIRST_UNLOCK`.
-- **Exit code:** still 1 only for HIGH findings by default; configurable with `--fail-on` / `failOn`. Errors exit 1.
-- **Node.js 20 or newer is required** (was 18).
-
-## 🐛 Fixes
-
-- `ASYNCSTORAGE_SENSITIVE_KEY` flags `last_token`-style keys again.
-- `--changed-files` works with `--path` on a monorepo subfolder, and no longer passes the git ref through a shell (refs starting with `-` are rejected).
-- rnsec tells you when `.env`, credential and registry-config files were not checked because the folder is not a git checkout.
+- **Errors now exit 2.** Exit codes are `0` (clean), `1` (findings at or above `--fail-on`) and `2` (scan, usage or internal error). CI that treated any non-zero exit the same is unaffected; CI that matched `1` for errors must be updated.
+- **`scan -p <missing dir>` now fails** with exit 2 instead of passing with zero files.
+- **Finding order is deterministic** (sorted by file, line, column and rule), so JSON and console order differs from 1.4.0.
+- **`--fail-on high` also fails on `critical`.**
+- `--owasp` does not change the HTML or Markdown reports.
+- **Finding counts drop**, and the missing-protection rules (`IOS_MISSING_APP_SNAPSHOT_PROTECTION`, `SCREENSHOT_PROTECTION_MISSING`, `MISSING_SESSION_TIMEOUT`) now give one project-level finding, so old baseline entries for them may no longer match.
+- **CI using `--min-confidence` or `--fail-on medium` may see changes**: 22 heuristic rules now carry explicit confidence values, and `DEPENDENCY_NONREGISTRY_SOURCE` is LOW for dependencies pinned to a git commit.
 
 ## Known gaps
 
-Typosquat detection and CodePush code signing checks are not included. Expo config rules read only literal values in `app.config.js|ts`. See the [CHANGELOG](https://github.com/adnxy/rnsec/blob/main/CHANGELOG.md#140---2026-10-23) for details.
+- Static analysis cannot establish MASVS compliance. There is no APK, IPA or dynamic analysis.
+- 7 rules have no OWASP mapping, with the reason listed in [docs/owasp-coverage.md](https://github.com/adnxy/rnsec/blob/main/docs/owasp-coverage.md).
+- `critical` is used by two cases by default.
+- `HARDCODED_SECRETS` and `API_KEY_EXPOSED` were not improved (26 findings on the benchmark corpus, mostly false positives); a few `NO_REQUEST_TIMEOUT` false positives remain for server code in app repositories; findings are not tiered.
 
 ---
 
 ## 📦 Install
 
 ```bash
-npm install -g rnsec@1.4.0
+npm install -g rnsec@1.5.0
 ```
 
 ## 💬 Support

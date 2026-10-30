@@ -1,9 +1,14 @@
 import _traverse from '@babel/traverse';
 const traverse = (_traverse as any).default || _traverse;
-import type { Rule, RuleContext, RuleGroup } from '../../types/ruleTypes.js';
+import type { ProjectInfo, Rule, RuleContext, RuleGroup } from '../../types/ruleTypes.js';
 import { Severity, type Finding } from '../../types/findings.js';
 import { getLineNumber, extractSnippet } from '../../utils/stringUtils.js';
 import { RuleCategory } from '../../types/ruleTypes.js';
+import { established, loadJsExpoConfig, prop, type Node } from '../security/expoConfigScanner.js';
+import { toRelativePath } from '../../utils/pathFilters.js';
+import { identifierTokens } from '../../utils/identifierUtils.js';
+import { classifyUrlOrigin } from '../../utils/urlOrigin.js';
+import { finalizeAbsence, ignoresAtAnchor, isAppSource, lowerCased, type Evidence } from '../../utils/projectEvidence.js';
 
 /** Package name of an import specifier ("lodash/fp" -> "lodash", "@a/b/c" -> "@a/b"); null for relative/absolute paths */
 function packageNameOf(specifier: string): string | null {
@@ -321,19 +326,74 @@ const insecureDeeplinkHandlerRule: Rule = {
   },
 };
 
+/** Packages that block screenshots / screen recording */
+const SCREENSHOT_PROTECTION_PACKAGES = [
+  'expo-screen-capture',
+  'react-native-capture-protection',
+  'react-native-screenshot-prevent',
+  'react-native-prevent-screenshot',
+  'react-native-screen-protection',
+  'react-native-flag-secure-android',
+];
+
+const SCREENSHOT_FILES = /\.(?:js|jsx|ts|tsx|java|kt|swift|m|mm)$/;
+
+/**
+ * Does this file block or react to screen capture? JS: a protection package or `preventScreenCapture`;
+ * Android: `FLAG_SECURE`; iOS: capture observers (`isCaptured`, `capturedDidChange`).
+ */
+export function hasScreenshotProtection(content: string, filePath: string): boolean {
+  if (/\.(?:java|kt)$/.test(filePath)) return content.includes('FLAG_SECURE');
+  if (/\.(?:swift|m|mm)$/.test(filePath)) return /(?:capturedDidChange|\.isCaptured|ScreenProtector)/.test(content);
+  const lower = lowerCased(content);
+  return (
+    SCREENSHOT_PROTECTION_PACKAGES.some(pkg => lower.includes(pkg)) ||
+    lower.includes('screen-capture') ||
+    lower.includes('preventscreencapture')
+  );
+}
+
+/**
+ * Absence-of-feature check, reported once per project (see projectEvidence.ts): candidates are screens with
+ * a sensitive input; any screenshot protection anywhere in the project (JS, FLAG_SECURE, a package) means no finding.
+ */
+let screenshotCandidates: Evidence[] = [];
+let screenshotProtected = false;
+
 const screenshotProtectionMissingRule: Rule = {
   id: 'SCREENSHOT_PROTECTION_MISSING',
   description: 'Sensitive screen without screenshot/screen recording protection',
   severity: Severity.MEDIUM,
-  fileTypes: ['.js', '.jsx', '.ts', '.tsx'],
+  fileTypes: ['.js', '.jsx', '.ts', '.tsx', '.java', '.kt', '.swift', '.m', '.mm'],
+  beginScan: () => {
+    screenshotCandidates = [];
+    screenshotProtected = false;
+  },
+  finalize: async (project?: ProjectInfo): Promise<Finding[]> =>
+    finalizeAbsence({
+      ruleId: 'SCREENSHOT_PROTECTION_MISSING',
+      severity: Severity.MEDIUM,
+      headline: 'Sensitive screens without screenshot protection - screens with secure inputs or payment forms were found and no screenshot protection (expo-screen-capture, FLAG_SECURE, ...) exists in the project',
+      suggestion: 'Use expo-screen-capture or react-native-screenshot-prevent to block screenshots on sensitive screens',
+      project,
+      candidates: screenshotCandidates,
+      protectionSeen: screenshotProtected,
+      protectionPackages: SCREENSHOT_PROTECTION_PACKAGES,
+      protectionFiles: SCREENSHOT_FILES,
+      hasProtection: hasScreenshotProtection,
+    }),
   apply: async (context: RuleContext): Promise<Finding[]> => {
     const findings: Finding[] = [];
+
+    if (!isAppSource(context)) return findings;
+    if (hasScreenshotProtection(context.fileContent, context.filePath)) screenshotProtected = true;
     
     if (!context.ast) {
       return findings;
     }
 
-    const filePath = context.filePath.toLowerCase();
+    // root-relative with a leading slash: where the repo is checked out must not change the result
+    const filePath = `/${toRelativePath(context.filePath, context.project?.rootDir)}`.toLowerCase();
     
     if (
       filePath.includes('node_modules') ||
@@ -413,8 +473,13 @@ const screenshotProtectionMissingRule: Rule = {
               const attrName = attr.name.name.toLowerCase();
               const attrValue = attr.value?.value?.toLowerCase() || '';
               
+              // `secureTextEntry={false}` / `={null}` / `={undefined}` is an ordinary input; bare or any other value counts
+              const expr = attr.value?.type === 'JSXExpressionContainer' ? attr.value.expression : null;
+              const secureTextEntryOff =
+                expr?.type === 'BooleanLiteral' ? expr.value === false :
+                expr?.type === 'NullLiteral' || (expr?.type === 'Identifier' && expr.name === 'undefined');
               if (
-                attrName === 'securetextentry' ||
+                (attrName === 'securetextentry' && !secureTextEntryOff) ||
                 (attrName === 'placeholder' && (
                   attrValue.includes('password') ||
                   attrValue.includes('pin code') ||
@@ -467,46 +532,9 @@ const screenshotProtectionMissingRule: Rule = {
       return findings;
     }
 
-    let hasScreenshotProtection = false;
-    
-    traverse(context.ast, {
-      ImportDeclaration(path: any) {
-        const { node } = path;
-        if (node.source && node.source.value) {
-          const importSource = node.source.value.toLowerCase();
-          if (
-            importSource.includes('screen-capture') || 
-            importSource.includes('screenshot-prevent') ||
-            importSource.includes('expo-screen-capture')
-          ) {
-            hasScreenshotProtection = true;
-          }
-        }
-      },
-      
-      CallExpression(path: any) {
-        const { node } = path;
-        
-        if (
-          node.callee.type === 'MemberExpression' &&
-          node.callee.object.name === 'ScreenCapture' &&
-          node.callee.property.name === 'preventScreenCaptureAsync'
-        ) {
-          hasScreenshotProtection = true;
-        }
-      },
-    });
-
-    if (!hasScreenshotProtection) {
-      findings.push({
-        ruleId: 'SCREENSHOT_PROTECTION_MISSING',
-        description: `Sensitive screen with ${sensitiveType} without screenshot protection`,
-        severity: Severity.MEDIUM,
-        filePath: context.filePath,
-        line: 1,
-        suggestion: 'Use expo-screen-capture or react-native-screenshot-prevent to block screenshots on sensitive screens',
-      });
-    }
+    if (ignoresAtAnchor(context.fileContent, 'SCREENSHOT_PROTECTION_MISSING')) return findings;
+    // anchor order is by path only (see orderEvidence): it must not move when a file is edited
+    screenshotCandidates.push({ filePath: context.filePath, priority: 0 });
 
     return findings;
   },
@@ -674,6 +702,7 @@ const networkLoggerInProductionRule: Rule = {
             
             findings.push({
               ruleId: 'NETWORK_LOGGER_IN_PRODUCTION',
+              confidence: 'medium',
               description: 'Network interceptor with logging not wrapped in __DEV__ check',
               severity: Severity.MEDIUM,
               filePath: context.filePath,
@@ -987,9 +1016,48 @@ const expoUpdatesNoCodeSigningRule: Rule = {
   id: 'EXPO_UPDATES_NO_CODE_SIGNING',
   description: 'Expo OTA updates configured without code signing verification',
   severity: Severity.HIGH,
-  fileTypes: ['.json'],
+  fileTypes: ['.json', '.js', '.ts'],
   apply: async (context: RuleContext): Promise<Finding[]> => {
     const findings: Finding[] = [];
+
+    // app.config.js/ts: absence is only reported when the whole updates setup is a plain literal.
+    // A dynamic spread (`...config`) or a non-literal `updates` could carry the certificate.
+    const jsExpo = loadJsExpoConfig(context);
+    if (jsExpo) {
+      if (jsExpo.t !== 'obj') return findings;
+      const updatesNode = established(jsExpo, 'updates');
+      const updates = updatesNode?.t === 'obj' ? updatesNode : undefined;
+      if (updatesNode && !updates) return findings; // updates: someVariable
+      if (updates?.spread) return findings;
+      // without a literal `updates`, a root spread may still supply it
+      if (!updates && jsExpo.spread) return findings;
+
+      const runtimeVersion = established(jsExpo, 'runtimeVersion');
+      const plugins = prop(jsExpo, 'plugins');
+      const hasPlugin =
+        plugins?.t === 'arr' &&
+        plugins.items.some(
+          (p: Node) => (p.t === 'str' && p.v === 'expo-updates') || (p.t === 'arr' && p.items[0]?.t === 'str' && p.items[0].v === 'expo-updates')
+        );
+      if (!updates && !runtimeVersion && !hasPlugin) return findings;
+
+      const hasCodeSigning = updates
+        ? updates.props.has('codeSigningCertificate') || updates.props.has('codeSigningMetadata')
+        : false;
+      if (!hasCodeSigning) {
+        const line = (updates ?? runtimeVersion)?.line ?? 1;
+        findings.push({
+          ruleId: 'EXPO_UPDATES_NO_CODE_SIGNING',
+          description: 'Expo OTA updates enabled without code signing - updates can be tampered with',
+          severity: Severity.HIGH,
+          filePath: context.filePath,
+          line,
+          snippet: extractSnippet(context.fileContent, line, 1),
+          suggestion: 'Enable code signing for Expo updates to prevent tampered OTA updates. Configure codeSigningCertificate in updates config.',
+        });
+      }
+      return findings;
+    }
 
     if (!context.config || !context.filePath.includes('app.json')) {
       return findings;
@@ -1051,8 +1119,10 @@ const insecureLinkingOpenRule: Rule = {
         ) {
           const arg = node.arguments[0];
 
-          // Only flag dynamic/variable URLs, not string literals
-          if (arg && arg.type !== 'StringLiteral') {
+          // Constants, enums, fixed `https://host/` prefixes and i18n lookups are not attacker-controlled
+          const origin = arg ? classifyUrlOrigin(arg, path.scope) : 'constant';
+
+          if (origin === 'untrusted' || origin === 'param') {
             const surroundingCode = context.fileContent.substring(
               Math.max(0, (node.start || 0) - 300),
               Math.min(context.fileContent.length, (node.end || 0) + 100)
@@ -1065,6 +1135,8 @@ const insecureLinkingOpenRule: Rule = {
 
               findings.push({
                 ruleId: 'INSECURE_LINKING_OPEN',
+                // route params, deep-link input and server data are named sources; a bare parameter is only a possibility
+                confidence: origin === 'untrusted' ? 'medium' : 'low',
                 description: 'Linking.openURL with unvalidated URL - may open malicious schemes (tel:, sms:, custom://)',
                 severity: Severity.HIGH,
                 filePath: context.filePath,
@@ -1081,6 +1153,31 @@ const insecureLinkingOpenRule: Rule = {
     return findings;
   },
 };
+
+// Unambiguous credential terms match anywhere in the lowercased name (`newPassword`, `clientsecret`, `card_number`).
+const NAV_SECRET_SUBSTRINGS = ['password', 'passwd', 'secret', 'apikey', 'cvv', 'creditcard', 'cardnumber'];
+// Short terms that sit inside ordinary words (`shipping`, `classname`) must be a whole word of the name.
+const NAV_SECRET_WORDS = new Set(['pin', 'pincode', 'ssn']);
+// `token` alone is ambiguous: in a wallet or a store it is an asset (`tokenSymbol`, `selectedToken`).
+// It counts as a credential when it is the whole name, follows an auth word, or leads a name without an asset noun.
+const NAV_AUTH_WORDS = new Set(['access', 'refresh', 'auth', 'id', 'session', 'sso', 'bearer', 'api', 'jwt', 'csrf', 'login', 'otp', 'reset', 'user', 'verification', 'invite']);
+const NAV_ASSET_NOUNS = new Set([
+  'symbol', 'address', 'id', 'name', 'image', 'img', 'icon', 'logo', 'url', 'uri', 'list', 'details', 'detail', 'info', 'amount',
+  'balance', 'decimals', 'standard', 'type', 'source', 'price', 'metadata', 'asset', 'assets', 'chain', 'count', 'index', 'ids',
+]);
+
+/** Is this navigation param name a credential? Substring terms, whole-word terms and the `token` rules above. */
+export function isSensitiveNavigationParamName(name: string): boolean {
+  const words = identifierTokens(name);
+  const joined = words.join('');
+  if (NAV_SECRET_SUBSTRINGS.some(t => joined.includes(t))) return true;
+  if (words.some(w => NAV_SECRET_WORDS.has(w))) return true;
+  const idx = words.indexOf('token');
+  if (idx === -1) return false;
+  if (words.length === 1) return true;
+  if (idx > 0 && NAV_AUTH_WORDS.has(words[idx - 1])) return true;
+  return idx === 0 && !NAV_ASSET_NOUNS.has(words[1]);
+}
 
 const sensitiveNavigationParamsRule: Rule = {
   id: 'SENSITIVE_NAVIGATION_PARAMS',
@@ -1109,20 +1206,18 @@ const sensitiveNavigationParamsRule: Rule = {
           if (paramsArg && paramsArg.type === 'ObjectExpression') {
             for (const prop of paramsArg.properties) {
               if (prop.type !== 'ObjectProperty' || !prop.key) continue;
+              // a callback (`onPasswordSet: () => ...`) carries no secret
+              if (prop.value?.type === 'ArrowFunctionExpression' || prop.value?.type === 'FunctionExpression') continue;
 
               const keyName = prop.key.type === 'Identifier' ? prop.key.name :
                              (prop.key.type === 'StringLiteral' ? prop.key.value : '');
-              const lowerKey = keyName.toLowerCase();
 
-              const sensitiveKeys = ['password', 'token', 'secret', 'apikey', 'api_key', 'accesstoken',
-                                     'access_token', 'refreshtoken', 'refresh_token', 'pin', 'cvv', 'ssn',
-                                     'creditcard', 'cardnumber'];
-
-              if (sensitiveKeys.some(k => lowerKey.includes(k))) {
+              if (isSensitiveNavigationParamName(keyName)) {
                 const line = getLineNumber(context.fileContent, node.start || 0);
 
                 findings.push({
                   ruleId: 'SENSITIVE_NAVIGATION_PARAMS',
+                  confidence: 'low',
                   description: `Sensitive data "${keyName}" passed via navigation params - persisted in navigation state`,
                   severity: Severity.MEDIUM,
                   filePath: context.filePath,
@@ -1211,6 +1306,7 @@ const pushNotificationSensitiveDataRule: Rule = {
 
               findings.push({
                 ruleId: 'PUSH_NOTIFICATION_SENSITIVE_DATA',
+                confidence: 'low',
                 description: 'Push notification data logged or stored insecurely - notifications may contain sensitive payloads',
                 severity: Severity.MEDIUM,
                 filePath: context.filePath,

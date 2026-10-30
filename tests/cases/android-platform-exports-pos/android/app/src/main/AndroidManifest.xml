@@ -1,0 +1,48 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.example.app">
+  <application android:label="App" android:allowBackup="false">
+    <provider android:name=".DataProvider" android:authorities="com.example.app.data" android:exported="true" />
+    <service android:name=".SyncService" android:exported="true" />
+    <activity android:name=".HiddenActivity" android:exported="true" />
+    <activity android:name=".AnyWebLink" android:exported="true">
+      <intent-filter>
+        <action android:name="android.intent.action.VIEW" />
+        <category android:name="android.intent.category.DEFAULT" />
+        <category android:name="android.intent.category.BROWSABLE" />
+        <data android:scheme="https" />
+      </intent-filter>
+    </activity>
+    <activity android:name=".WildcardHost" android:exported="true">
+      <intent-filter>
+        <action android:name="android.intent.action.VIEW" />
+        <category android:name="android.intent.category.DEFAULT" />
+        <category android:name="android.intent.category.BROWSABLE" />
+        <data android:scheme="https" android:host="*" />
+      </intent-filter>
+    </activity>
+    <activity android:name=".WildcardScheme" android:exported="true">
+      <intent-filter>
+        <action android:name="android.intent.action.VIEW" />
+        <category android:name="android.intent.category.DEFAULT" />
+        <category android:name="android.intent.category.BROWSABLE" />
+        <data android:scheme="*" />
+      </intent-filter>
+    </activity>
+    <activity android:name=".MixedActivity" android:exported="true">
+      <intent-filter>
+        <action android:name="android.intent.action.SEND" />
+        <category android:name="android.intent.category.DEFAULT" />
+      </intent-filter>
+      <intent-filter>
+        <action android:name="com.example.app.INTERNAL" />
+      </intent-filter>
+    </activity>
+    <activity android:name=".OpenFiles" android:exported="true">
+      <intent-filter>
+        <action android:name="android.intent.action.VIEW" />
+        <category android:name="android.intent.category.DEFAULT" />
+        <data android:scheme="content" android:mimeType="application/octet-stream" />
+      </intent-filter>
+    </activity>
+    <!-- <activity android:name=".Commented" android:exported="true"><intent-filter><action android:name="android.intent.action.SENDTO" /></intent-filter></activity> -->
+  </application>
+</manifest>

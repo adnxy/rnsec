@@ -1,10 +1,12 @@
 import _traverse from '@babel/traverse';
 const traverse = (_traverse as any).default || _traverse;
-import type { Rule, RuleContext, RuleGroup } from '../../types/ruleTypes.js';
+import type { ProjectInfo, Rule, RuleContext, RuleGroup } from '../../types/ruleTypes.js';
 import { Severity, type Finding } from '../../types/findings.js';
 import { getLineNumber, extractSnippet } from '../../utils/stringUtils.js';
 import { RuleCategory } from '../../types/ruleTypes.js';
 import { identifierHasTerm, identifierEndsWithTerm, identifierTokens, blankComments } from '../../utils/identifierUtils.js';
+import { toRelativePath } from '../../utils/pathFilters.js';
+import { finalizeAbsence, ignoresAtAnchor, isAppSource, lowerCased, type Evidence } from '../../utils/projectEvidence.js';
 
 // Names of values that must be unpredictable. Matched as whole identifier words, anywhere in the name.
 const RANDOM_SENSITIVE_TERMS: ReadonlySet<string> = new Set([
@@ -26,6 +28,17 @@ const GENERIC_SINK_NAMES = new Set([
   'r', 'res', 'result', 'out', 'output', 'str', 's', 'value', 'val', 'ret', 'id', 'chars', 'buf', 'buffer',
   'text', 'rand', 'random', 'randomstring', 'string', 'acc', 'code', 'bytes', 'arr',
 ]);
+
+const COMPARISON_OPERATORS: ReadonlySet<string> = new Set(['==', '===', '!=', '!==', '<', '>', '<=', '>=']);
+const PREDICATE_PREFIX = /^(?:is|has|should|can|check|verify|validate|compare)(?:[A-Z_]|$)/;
+const CONVERSION_FUNCTIONS: ReadonlySet<string> = new Set(['Number', 'String', 'BigInt', 'parseInt', 'parseFloat']);
+
+/** `Math.floor(x)`, `Number(x)`, `BigInt(x)`: the result is still the value that was passed in. */
+function isValueConversion(callee: any): boolean {
+  if (callee?.type === 'Identifier') return CONVERSION_FUNCTIONS.has(callee.name);
+  return callee?.type === 'MemberExpression' && callee.object?.type === 'Identifier' &&
+    (callee.object.name === 'Math' || callee.object.name === 'Number' || callee.object.name === 'BigInt');
+}
 
 /** `generateToken`, `createSessionId`, `uuid`: a function whose job is to mint a secret value. */
 function isRandomGeneratorName(name: string): boolean {
@@ -67,7 +80,7 @@ function functionName(fnPath: any): string | null {
  * (`Math.random().toString(36).slice(2)`, `'t-' + Math.random()`) until it is stored in a variable,
  * property, argument or returned. Returns the receiving name when it is security-related.
  */
-function randomSinkName(start: any): string | null {
+function randomSinkName(start: any, isDateNow = false): string | null {
   let child: any = start;
   let path: any = start.parentPath;
 
@@ -82,24 +95,40 @@ function randomSinkName(start: any): string | null {
         return node.value === child.node ? targetName(node.key) : null;
       case 'ReturnStatement': {
         const fn = path.getFunctionParent();
-        return fn ? functionName(fn) : null;
+        const name = fn ? functionName(fn) : null;
+        // a returned timestamp is only a secret when the function mints one (`generateSessionId`)
+        return isDateNow && name && !isRandomGeneratorName(name) ? null : name;
       }
-      case 'ArrowFunctionExpression':
+      case 'ArrowFunctionExpression': {
         // expression-bodied arrow: `const makeToken = () => Math.random()...`
-        return node.body === child.node ? functionName(path) : null;
+        if (node.body !== child.node) return null;
+        const name = functionName(path);
+        return isDateNow && name && !isRandomGeneratorName(name) ? null : name;
+      }
+      case 'ConditionalExpression':
+        // `Math.random() < 0.5 ? a : b`: the value is only a test
+        if (node.test === child.node) return null;
+        break;
       case 'CallExpression': {
         if (node.callee !== child.node) {
           // used as an argument: `setToken(Math.random())`, `storage.set('token', ...)`
           const callee = calleeName(node.callee);
+          // `isTokenExpired(Date.now())` asks a question about a token, it does not mint one
+          if (callee && PREDICATE_PREFIX.test(callee)) return null;
           if (isSecurityRandomName(callee)) return callee;
           const label = node.arguments[0];
           if (label?.type === 'StringLiteral' && label !== child.node && isSecurityRandomName(label.value)) return label.value;
+          // the call's result is not the random value unless the call only converts it (`BigInt(...)`, `Math.floor(...)`)
+          if (!isValueConversion(node.callee)) return null;
         }
         break;
       }
+      case 'BinaryExpression':
+        // comparisons and elapsed-time arithmetic (`Date.now() - start`) do not produce a secret
+        if (COMPARISON_OPERATORS.has(node.operator) || (isDateNow && node.operator === '-')) return null;
+        break;
       case 'MemberExpression':
       case 'OptionalMemberExpression':
-      case 'BinaryExpression':
       case 'LogicalExpression':
       case 'UnaryExpression':
       case 'ConditionalExpression':
@@ -142,7 +171,7 @@ const insecureRandomRule: Rule = {
         const isDateNow = callee.object.name === 'Date' && callee.property.name === 'now';
         if (!isMathRandom && !isDateNow) return;
 
-        const sink = randomSinkName(path);
+        const sink = randomSinkName(path, isDateNow);
         let name = isSecurityRandomName(sink) ? sink : null;
 
         // The value was built up in a throwaway variable (`r += chars[Math.floor(Math.random() * n)]`) or an
@@ -320,6 +349,7 @@ const textInputNoSecureRule: Rule = {
             
             findings.push({
               ruleId: 'TEXT_INPUT_NO_SECURE',
+              confidence: 'medium',
               description: `TextInput for ${sensitiveType} without secureTextEntry property`,
               severity: Severity.MEDIUM,
               filePath: context.filePath,
@@ -539,20 +569,58 @@ const improperBiometricFallbackRule: Rule = {
   },
 };
 
+/** Packages that implement inactivity / idle timeouts */
+const SESSION_TIMEOUT_PACKAGES = ['react-native-user-inactivity', 'react-native-idle-timer', 'react-native-inactivity'];
+
+const SESSION_FILES = /\.(?:js|jsx|ts|tsx)$/;
+
+/**
+ * Does this file implement a session lifetime? An inactivity/idle timer, auto-lock/auto-logout, an explicit
+ * session or token expiry (`expiresIn`, `isTokenExpired`, `jwt-decode`, ...), or an AppState handler that
+ * logs out or locks. `AppState` alone is not enough: nearly every app has one.
+ */
+export function hasSessionLifetimeLogic(content: string, filePath: string): boolean {
+  if (!SESSION_FILES.test(filePath)) return false;
+  const lower = lowerCased(content);
+  return (
+    /inactivity|idle[_\s-]?(?:timeout|timer)|auto[_-]?log[_-]?out|auto[_-]?lock|session[_-]?(?:timeout|duration|expir|ttl|lifetime)/.test(lower) ||
+    /(?:token|session|jwt|credential)s?[\s_-]{0,2}(?:expir|ttl|lifetime)|(?<![a-z])(?:expir\w{0,6}|ttl|lifetime)[\s_-]{0,2}(?:token|session)|(?:is|has|check)token(?:expired|valid)|jwt[-_]?decode/.test(lower) ||
+    // OAuth-style `expires_in` only counts next to tokens (invoices, coupons, statuses and caches also expire)
+    (/token/.test(lower) && /expires[_-]?in\b/.test(lower)) ||
+    (lower.includes('appstate') && /log[_-]?out|sign[_-]?out|\block(?:ed|app|screen)?\b|biometric/.test(lower) && /settimeout|setinterval|date\.now|timer/.test(lower))
+  );
+}
+
+/**
+ * Absence-of-feature check, reported once per project (see projectEvidence.ts): candidates are auth files that
+ * log in / store a token and mention no timeout or expiry; session lifetime logic anywhere in the project
+ * (see `hasSessionLifetimeLogic`) means no finding.
+ */
+let sessionCandidates: Evidence[] = [];
+let sessionLogicSeen = false;
+
 const missingSessionTimeoutRule: Rule = {
   id: 'MISSING_SESSION_TIMEOUT',
   description: 'Authentication session without timeout or inactivity expiry',
   severity: Severity.MEDIUM,
   fileTypes: ['.js', '.jsx', '.ts', '.tsx'],
+  beginScan: () => {
+    sessionCandidates = [];
+    sessionLogicSeen = false;
+  },
   apply: async (context: RuleContext): Promise<Finding[]> => {
     const findings: Finding[] = [];
+
+    if (!isAppSource(context)) return findings;
+    if (hasSessionLifetimeLogic(context.fileContent, context.filePath)) sessionLogicSeen = true;
 
     if (!context.ast) {
       return findings;
     }
 
     // Only check auth-related files
-    const filePath = context.filePath.toLowerCase();
+    // root-relative: a checkout under ~/code/auth-app/ must not make every file an auth file
+    const filePath = toRelativePath(context.filePath, context.project?.rootDir).toLowerCase();
     const isAuthFile =
       filePath.includes('auth') ||
       filePath.includes('session') ||
@@ -593,19 +661,26 @@ const missingSessionTimeoutRule: Rule = {
       content.includes('auto_logout') ||
       content.includes('idle');
 
-    if (!hasTimeout) {
-      findings.push({
-        ruleId: 'MISSING_SESSION_TIMEOUT',
-        description: 'Authentication session without timeout or inactivity expiry',
-        severity: Severity.MEDIUM,
-        filePath: context.filePath,
-        line: 1,
-        suggestion: 'Implement session timeout for authentication. Auto-logout users after inactivity period. Set token expiration and validate on each request.',
-      });
+    if (!hasTimeout && !ignoresAtAnchor(context.fileContent, 'MISSING_SESSION_TIMEOUT')) {
+      // anchor order is by path only (see orderEvidence): it must not move when a file is edited
+      sessionCandidates.push({ filePath: context.filePath, priority: 0 });
     }
 
     return findings;
   },
+  finalize: async (project?: ProjectInfo): Promise<Finding[]> =>
+    finalizeAbsence({
+      ruleId: 'MISSING_SESSION_TIMEOUT',
+      severity: Severity.MEDIUM,
+      headline: 'Authentication session without timeout or inactivity expiry - no inactivity timer, auto-logout or token-expiry logic was found in the project',
+      suggestion: 'Implement session timeout for authentication. Auto-logout users after inactivity period. Set token expiration and validate on each request.',
+      project,
+      candidates: sessionCandidates,
+      protectionSeen: sessionLogicSeen,
+      protectionPackages: SESSION_TIMEOUT_PACKAGES,
+      protectionFiles: SESSION_FILES,
+      hasProtection: hasSessionLifetimeLogic,
+    }),
 };
 
 export const authenticationRules: RuleGroup = {

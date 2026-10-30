@@ -7,6 +7,99 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased]
+
+---
+
+## [1.5.0] - 2026-10-30
+
+### OWASP MASVS mapping, a CRITICAL severity and exit code 2 for errors
+
+rnsec now ships **110 rules** (105 in 1.4.0). No rule ID was removed or renamed. Read the upgrade notes below before updating a CI pipeline that compares the exit code with `1`.
+
+### Behaviour changes
+
+- **Errors exit `2` instead of `1`** (findings still exit `1`).
+- **`rnsec scan -p <missing directory>` fails** with exit `2` instead of scanning zero files and exiting `0`.
+- **Finding order is deterministic** (file, line, column, rule, description), so output order can differ from 1.4.0.
+- **Fewer findings by design.** On a corpus of 8 open-source apps the default output drops from 1460 to 524 findings (see Precision below), so a baseline, a finding count threshold or a dashboard built on 1.4.0 numbers will show a large drop. Nothing was lost on the known true positives that were checked.
+- **Absence findings are project-level.** `IOS_MISSING_APP_SNAPSHOT_PROTECTION`, `SCREENSHOT_PROTECTION_MISSING` and `MISSING_SESSION_TIMEOUT` now produce one finding for the project, only when no protection exists anywhere in it, instead of one per file. Baseline entries for the old per-file findings may no longer match.
+- **Severity of pinned git dependencies.** `DEPENDENCY_NONREGISTRY_SOURCE` reports LOW (was MEDIUM) for a dependency pinned to a git commit (6 to 40 hex characters). This matters with `--fail-on medium`.
+- **Confidence values were added to 22 heuristic rules** (explicit `low` or `medium`), so `--min-confidence` filters differently than in 1.4.0.
+- **Code-pattern rules skip generated bundles and non-app source** (scripts, tools, e2e, mocks). Secret, credential, config, dependency and manifest rules still scan everywhere.
+
+### Added
+
+- **OWASP mapping layer** (`src/standards/owasp/`): a vendored snapshot of OWASP MASVS 2.1.0 (8 categories including PRIVACY, 24 controls), MASWE 1.0.0 and MASTG (v2.0.0 + master@2eb0f70), a central rule-to-standard table (MASVS controls, MASWE weaknesses, static MASTG tests, CWE, platform, mapping confidence) and `scripts/update-owasp-snapshot.mjs` to refresh the snapshot. 103 of the 110 rules are mapped; the other seven are listed with a reason. Only IDs that exist in the pinned snapshot are accepted, and tests enforce that every rule is mapped or explicitly unmapped.
+- **`--owasp`** (and `"owasp": true` in the config): adds an `OWASP:` line per finding to the console report, `title`, `platform` and `standards` per finding plus an `owasp` section to the JSON output, and a MASVS coverage report. `rnsec rules --owasp` lists every rule with its MASVS and MASWE ids.
+- **MASVS coverage model**: each of the 24 controls is `failed`, `checked` (`checked-heuristic` when only low-confidence presence/absence rules map to it), `not-applicable` (the mapped rules target a platform the project lacks) or `not-assessed` (no enabled rule maps to it; needs manual or dynamic testing). The report states that static analysis does not establish MASVS compliance, and `--changed-files` scans are labelled as partial.
+- **`--format console|json|sarif`**: `json` is the same as `--json`; `sarif` prints SARIF 2.1.0 to stdout. Both machine formats write no default report files and keep informational lines on stderr.
+- **`critical` severity**: `--fail-on critical`, `failOn: "critical"` and `severityOverrides` values of `CRITICAL`; shown in the console, Markdown and HTML summaries and reported as SARIF level `error` with security-severity 9.5. `--fail-on high` also fails on critical findings.
+- **SARIF taxonomy, tags and help links**: rules carry `MASVS-*`, `MASWE-*` and `external/cwe/cwe-*` tags, relationships to a MASVS taxonomy and a `helpUri` to the official OWASP page. This does not depend on `--owasp`.
+- **`TLS_VALIDATION_DISABLED_NATIVE`** (HIGH, MEDIUM when only behind a condition; Android and iOS): certificate or host name validation turned off in the app's own Java, Kotlin, Swift or Objective-C code: an empty `X509TrustManager.checkServerTrusted`, a `HostnameVerifier` that only returns `true` (also the allow-all host name verifier constants), `onReceivedSslError` calling `proceed()` without looking at the error, and `URLSessionDelegate` / `WKNavigationDelegate` challenge handlers that answer `.useCredential` with a credential made from the server trust and never evaluate it. Code under `BuildConfig.DEBUG` / `#if DEBUG` and vendored directories is skipped. Mapped to MASWE-0027 (MASVS-NETWORK-1), MASTG-TEST-0282, 0283, 0284, 0396 and 0397, CWE-295.
+- **`GRADLE_INSECURE_REPOSITORY`** (HIGH; Android): a Maven repository with an `http://` URL or `allowInsecureProtocol = true` in `build.gradle` / `settings.gradle` (`.kts` too). Comments, `localhost` and private-network hosts are ignored. `settings.gradle` and `settings.gradle.kts` are now collected by the file walker. Mapped to MASWE-0048 (MASVS-CODE-3).
+- **`ANDROID_FILEPROVIDER_BROAD_PATHS`** (HIGH for `<root-path>`, MEDIUM for `external-path` with `path="."`, LOW for other whole-directory paths; Android): FileProvider `res/xml` paths files that share a whole directory tree. Only files whose root element is `<paths>` are examined. Mapped to MASWE-0018 (MASVS-AUTH-1, MASVS-PLATFORM-1, MASVS-STORAGE-2), MASTG-TEST-0357, CWE-552.
+- **`FIREBASE_RULES_OPEN_ACCESS`** (HIGH; HIGH/MEDIUM/LOW by access and scope): `firestore.rules` and `storage.rules` with `allow ...: if true;` (or no condition), and a `database.rules.json` with root `".read"` / `".write"` set to `true`. Time-limited "test mode" rules (`request.time < timestamp.date(...)`) are MEDIUM (write) or LOW (read-only) whatever today's date is; public read-only access to one specific path is not reported. Not mapped to MASVS: the rules protect the backend, which MASVS does not cover (the reason is listed in the coverage matrix).
+- **`EXPO_PUBLIC_ENV_SECRET`** (HIGH/MEDIUM): a secret-named `EXPO_PUBLIC_*` variable in a `.env` file; Expo inlines these values into the app bundle.
+- **`app.config.js` / `app.config.ts` support** for `EXPO_UPDATES_NO_CODE_SIGNING`, `EXPO_INSECURE_PERMISSIONS` and `EXPO_UPDATES_INSECURE_URL`, which only read `app.json` before. Only literal values of a statically known object are read: a dynamic spread (`...config`) or a non-literal `updates` makes the rules stay quiet instead of guessing.
+- **Docs and examples**: [`docs/owasp-coverage.md`](docs/owasp-coverage.md) (generated by `npm run docs:owasp`, checked for staleness by a test), [`docs/adding-rules.md`](docs/adding-rules.md), updated GitHub Actions and GitLab CI examples (SARIF, `--fail-on`, exit codes) and `examples/pre-commit/`.
+
+### Changed
+
+- **First CRITICAL findings**: `COMMITTED_CREDENTIAL_FILE` now reports CRITICAL for a committed service-account JSON whose `private_key` is an unencrypted PEM key, and for a `.p8` file that contains an unencrypted PEM private key. Criterion: the finding alone gives direct privileged access, or lets an attacker defeat a core control, with no further precondition, and detection is high precision. Password-protected keystores (`.jks`, `.keystore`, `.p12`, `.pfx`), `.mobileprovision`, a `.p8` that is not a readable PEM key, and every other rule keep their level. `--fail-on high` already fails on critical, so default exit codes do not change.
+- **`rnsec scan --format json|sarif | head` no longer prints an EPIPE stack trace** when the reader closes the pipe early; rnsec exits quietly with the exit code the scan had already decided (0 or 1).
+- **Findings are sorted deterministically** (file, line, column, rule, description), so two scans of the same tree list findings in the same order (the `owasp` section and the SARIF are identical too).
+- The build copies `snapshot.json` into `dist/`; `docs:owasp` is a new npm script.
+
+### Precision
+
+This release reduces false positives. It was measured on 8 open-source apps (bluesky social-app, mattermost-mobile, Rocket.Chat.ReactNative, BlueWallet, metamask-mobile, eigen, joplin app-mobile and the ignite boilerplate) at pinned commits listed in `bench/corpus.json`; see [`docs/benchmark.md`](docs/benchmark.md). Default-output findings on that corpus: **1460 before the precision work, 524 after it, 533 after the four new rules** (which added 9 hand-verified true positives; the other 524 come from existing rules). None of the 12 known true positives (a reconstructed gate) was lost.
+
+**What this does and does not show.** Samples of about 200 removed findings were reviewed by hand: all but one were correct removals, and that one clear regression was fixed. The findings that remain are mostly "plausible, needs review", not confirmed exploitable. **Precision as a percentage is not established**: it was judged by volume and hand sampling, not on a labelled hold-out set. The 12-case recall gate is small. Read the numbers as directional.
+
+#### Engine
+
+- **A crash in `INSECURE_WEBSOCKET` is fixed.** It silently dropped 8 files from the corpus scan.
+- **Rule exceptions and parse failures are counted**, reported on stderr as `Scan incomplete: ...` and exposed as top-level `ruleErrors` and `parseFailures` in the JSON output, only when greater than 0.
+- **Generated bundles and non-app source** (scripts, tools, e2e, mocks) no longer produce findings for code-pattern rules. Secret, credential, config, dependency and manifest rules still scan everywhere. The generated-bundle heuristic needs a banner or a second minification signal.
+- **Keyword gating uses project-relative paths** instead of absolute ones, so a checkout under a directory named like a keyword is no longer misclassified.
+
+#### Rule fixes
+
+- `SENSITIVE_DATA_IN_ERROR_MESSAGES` needs the error detail to reach a UI, network or third-party sink.
+- `INSECURE_LINKING_OPEN` classifies the URL origin: a constant, versus a route parameter, deep link or server data.
+- `CUSTOM_CRYPTO_IMPLEMENTATION` matches whole name tokens, requires crypto primitives and is MEDIUM with low confidence.
+- `INSECURE_RANDOM` reports only random values that flow into secrets.
+- `IOS_MISSING_APP_SNAPSHOT_PROTECTION`, `SCREENSHOT_PROTECTION_MISSING` and `MISSING_SESSION_TIMEOUT` are one project-level finding when no protection exists anywhere in the project. With `--changed-files`, protection is judged on the whole project. The baseline fingerprint uses rule, path and the first line of the anchor; `ignoredRules` and `rnsec-ignore` work as before.
+- `NO_REQUEST_TIMEOUT` respects project wrappers and defaults.
+- `ANDROID_INTENT_FILTER_PERMISSIVE`, `ANDROID_EXPORTED_COMPONENT` and `ANDROID_UNPROTECTED_RECEIVER` no longer flag platform-required exports: launcher activities, share targets, widgets, FCM services and specific deep links.
+- `DEPENDENCY_NONREGISTRY_SOURCE`: pinned git commits (6 to 40 hex characters) are LOW.
+- `SENSITIVE_NAVIGATION_PARAMS` and `IOS_BACKGROUND_MODES_UNNECESSARY` are tightened.
+- 22 heuristic rules now carry an explicit `low` or `medium` confidence.
+
+#### New rules and their evidence
+
+The four new rules (`TLS_VALIDATION_DISABLED_NATIVE`, `GRADLE_INSECURE_REPOSITORY`, `ANDROID_FILEPROVIDER_BROAD_PATHS`, `FIREBASE_RULES_OPEN_ACCESS`) are listed under Added. Together they found 9 hand-verified true positives on the corpus. `ANDROID_FILEPROVIDER_BROAD_PATHS` and `FIREBASE_RULES_OPEN_ACCESS` had zero hits there, so their precision on real apps is unmeasured.
+
+#### Known limits
+
+- Server code inside app repositories and fetches of local URIs still cause a few `NO_REQUEST_TIMEOUT` false positives.
+- `WEBVIEW_POSTMESSAGE_NO_ORIGIN_CHECK` is unchanged.
+- `HARDCODED_SECRETS` and `API_KEY_EXPOSED` were not improved in this release. They remain noisy: 26 findings on the corpus, mostly false positives.
+- Project-level findings are per scan root, so a monorepo gets one per root.
+- Output tiers (vulnerability, review, hardening) are not implemented.
+
+### Upgrade notes (CI behaviour can change)
+
+- **Errors now exit `2`; findings still exit `1`.** Before, an error (invalid option or value, invalid config value, unreadable baseline, `--changed-files` outside a git repository, an unexpected exception) also exited `1`, so a failed scan looked like a scan with findings. A script that treats every non-zero code as failure keeps working; one that tests for exactly `1` must also handle `2`. `--help` and `--version` still exit `0`.
+- **`rnsec scan -p <missing directory>` now exits `2`** with an error. It used to scan zero files and exit `0`.
+- `--fail-on` accepts `critical`, and `severityOverrides` accepts `CRITICAL`.
+- **Finding counts drop sharply** (1460 to 524 on the benchmark corpus), and absence findings are now one per project. Re-create baselines if you depend on the old per-file absence entries.
+- **CI using `--fail-on medium` or `--min-confidence` may see changes**: pinned git dependencies are LOW, and 22 heuristic rules now carry explicit confidence values.
+- Scans now print `Scan incomplete: ...` on stderr when a rule throws or a file fails to parse.
+
+---
+
 ## [1.4.0] - 2026-10-23
 
 ### New rules, CI features and far fewer false positives

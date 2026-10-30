@@ -1,0 +1,7 @@
+{
+  "rules": {
+    ".read": "auth != null",
+    ".write": false,
+    "public": { ".read": true }
+  }
+}

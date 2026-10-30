@@ -1,0 +1,1 @@
+{ "name": "firebase-rules-neg", "version": "1.0.0", "dependencies": { "react-native": "0.76.0", "@react-native-firebase/app": "21.0.0" } }

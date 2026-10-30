@@ -1,11 +1,15 @@
+import { propertyKeyName } from '../../utils/identifierUtils.js';
 import _traverse from '@babel/traverse';
 const traverse = (_traverse as any).default || _traverse;
-import type { Rule, RuleContext, RuleGroup } from '../../types/ruleTypes.js';
+import type { ProjectInfo, Rule, RuleContext, RuleGroup } from '../../types/ruleTypes.js';
 import { Severity, type Finding } from '../../types/findings.js';
 import { getLineNumber, extractSnippet } from '../../utils/stringUtils.js';
 import { RuleCategory } from '../../types/ruleTypes.js';
 import { isLocalOrPrivateHost, classifyIpv4 } from '../../utils/hostUtils.js';
 import { isNonProductionPath } from '../../utils/pathFilters.js';
+import { collectDevOnlyRanges, isLineInRanges } from '../../utils/devGuards.js';
+import { isAppSource, projectHasFile } from '../../utils/projectEvidence.js';
+import { nativeTlsValidationRule } from './nativeTlsScanner.js';
 
 interface UrlPrefix {
   text: string;
@@ -224,18 +228,114 @@ function subtreeHasTimeoutGuard(root: any): boolean {
   return abortSignalTimeout || timeoutOption || (abortController && timer) || (race && timer);
 }
 
+/** Packages that export a `fetch` with the platform's semantics: no timeout unless the caller adds one */
+const GLOBAL_EQUIVALENT_FETCH = /^(?:node-fetch|cross-fetch|whatwg-fetch|isomorphic-fetch|isomorphic-unfetch|unfetch|expo\/fetch|react-native-fetch-api)$/;
+/** URL schemes that never leave the device */
+const LOCAL_URL_SCHEME = /^(?:file|data|blob|content|asset|assets-library|ph|ipod-library):/i;
+
+/**
+ * Is this `fetch` the platform's global fetch (or a drop-in for it)? A `fetch` that resolves to a local
+ * function, a parameter, a project wrapper (relative or aliased import) or any other package is somebody
+ * else's API: the call is judged where the real global `fetch` is called.
+ */
+function isGlobalFetch(path: any): boolean {
+  const binding = path.scope.getBinding('fetch');
+  if (!binding) return true;
+  const decl = binding.path;
+  if (decl.isImportSpecifier() || decl.isImportDefaultSpecifier() || decl.isImportNamespaceSpecifier()) {
+    return GLOBAL_EQUIVALENT_FETCH.test(decl.parent?.source?.value ?? '');
+  }
+  if (decl.isVariableDeclarator()) {
+    const init = decl.node.init;
+    // `const fetch = require('node-fetch')`
+    if (init?.type === 'CallExpression' && init.callee?.name === 'require' && init.arguments[0]?.type === 'StringLiteral') {
+      return GLOBAL_EQUIVALENT_FETCH.test(init.arguments[0].value);
+    }
+    // `const fetch = global.fetch`
+    return init?.type === 'MemberExpression' && ['global', 'globalThis', 'window', 'self'].includes(init.object?.name) && init.property?.name === 'fetch';
+  }
+  return false;
+}
+
+/** The URL argument is visibly a local resource (`file://`, `blob:`, `data:`, `require(...)`, `URL.createObjectURL(...)`) */
+function isLocalResourceUrl(arg: any, path: any, depth = 0): boolean {
+  if (!arg || depth > 3) return false;
+  const prefix = literalUrlPrefix(arg);
+  if (prefix) return LOCAL_URL_SCHEME.test(prefix.text);
+  if (arg.type === 'CallExpression') {
+    const c = arg.callee;
+    if (c?.type === 'Identifier' && c.name === 'require') return true;
+    return c?.type === 'MemberExpression' && ['createObjectURL', 'resolveAssetSource', 'toDataURL'].includes(c.property?.name);
+  }
+  if (arg.type === 'Identifier') {
+    const init = path.scope.getBinding(arg.name)?.path?.node?.init;
+    return init ? isLocalResourceUrl(init, path, depth + 1) : false;
+  }
+  return false;
+}
+
+/** `axios.defaults.timeout = ...` */
+function isAxiosDefaultsTimeout(left: any): boolean {
+  return left?.type === 'MemberExpression' && left.property?.name === 'timeout' &&
+    left.object?.type === 'MemberExpression' && left.object.property?.name === 'defaults';
+}
+
+/** `globalThis.fetch = ...`: the app replaced the global fetch */
+function isGlobalFetchAssignment(left: any): boolean {
+  return left?.type === 'MemberExpression' && !left.computed && left.property?.name === 'fetch' &&
+    left.object?.type === 'Identifier' && ['global', 'globalThis', 'window', 'self'].includes(left.object.name);
+}
+
+const AXIOS_DEFAULT_TIMEOUT_TEXT = /axios\.defaults\.timeout\s*=/;
+// text approximation of `isGlobalFetchAssignment` + `subtreeHasTimeoutGuard` for the unchanged files of a partial scan
+const GLOBAL_FETCH_ASSIGNMENT_TEXT = /\b(?:global|globalThis|window|self)\.fetch\s*=(?!=)[\s\S]{0,800}?(?:AbortSignal\.timeout|AbortController|\btimeout\b)/;
+const TIMEOUT_SOURCE_FILES = /\.(?:js|jsx|ts|tsx)$/;
+
+interface TimeoutCandidate {
+  kind: 'fetch' | 'axios';
+  finding: Finding;
+}
+
+/**
+ * Calls are collected in `apply` and reported by `finalize`, so a project-wide default can still clear them:
+ * `axios.defaults.timeout = ...` anywhere covers every `axios.<verb>()` call, and an app-level
+ * `globalThis.fetch = ...` override that itself bounds the request (AbortSignal.timeout, a timer + AbortController, ...)
+ * covers every global `fetch()` call. (An `axios.create({ timeout })` instance
+ * or a fetch helper only covers the calls that go through it, and those never match this rule.)
+ * In `--changed-files` scans the rest of the project is read from disk to look for these defaults.
+ */
+let timeoutCandidates: TimeoutCandidate[] = [];
+let axiosDefaultSeen = false;
+let globalFetchPatched = false;
+
 const noRequestTimeoutRule: Rule = {
   id: 'NO_REQUEST_TIMEOUT',
   description: 'Network request without timeout configuration',
   // A hanging server can only stall the user's own request on a mobile client: low impact.
   severity: Severity.LOW,
   fileTypes: ['.js', '.jsx', '.ts', '.tsx'],
-  apply: async (context: RuleContext): Promise<Finding[]> => {
-    const findings: Finding[] = [];
-    
-    if (!context.ast) {
-      return findings;
+  beginScan: () => {
+    timeoutCandidates = [];
+    axiosDefaultSeen = false;
+    globalFetchPatched = false;
+  },
+  finalize: async (project?: ProjectInfo): Promise<Finding[]> => {
+    const wants = (kind: 'fetch' | 'axios') => timeoutCandidates.some(c => c.kind === kind);
+    if (wants('axios') && !axiosDefaultSeen) {
+      axiosDefaultSeen = await projectHasFile(project, TIMEOUT_SOURCE_FILES, c => AXIOS_DEFAULT_TIMEOUT_TEXT.test(c));
     }
+    if (wants('fetch') && !globalFetchPatched) {
+      globalFetchPatched = await projectHasFile(project, TIMEOUT_SOURCE_FILES, c => GLOBAL_FETCH_ASSIGNMENT_TEXT.test(c));
+    }
+    return timeoutCandidates
+      .filter(c => !(c.kind === 'axios' ? axiosDefaultSeen : globalFetchPatched))
+      .map(c => c.finding);
+  },
+  apply: async (context: RuleContext): Promise<Finding[]> => {
+    if (!context.ast || !isAppSource(context)) {
+      return [];
+    }
+    let devRanges: ReturnType<typeof collectDevOnlyRanges> | undefined;
 
     // axios.create({ timeout }) / axios.defaults.timeout = ... anywhere in the file covers its axios calls.
     let axiosDefaultTimeout = false;
@@ -252,12 +352,12 @@ const noRequestTimeoutRule: Rule = {
       },
       AssignmentExpression(path: any) {
         const { left } = path.node;
-        if (
-          left.type === 'MemberExpression' && left.property?.name === 'timeout' &&
-          left.object?.type === 'MemberExpression' && left.object.property?.name === 'defaults'
-        ) {
+        if (isAxiosDefaultsTimeout(left)) {
           axiosDefaultTimeout = true;
+          axiosDefaultSeen = true;
         }
+        // only an override that bounds the request counts: nitro/mock-server shims replace fetch without adding a timeout
+        if (isGlobalFetchAssignment(left) && subtreeHasTimeoutGuard(path.node.right)) globalFetchPatched = true;
       },
     });
 
@@ -270,17 +370,22 @@ const noRequestTimeoutRule: Rule = {
       return false;
     };
 
-    const report = (path: any, description: string, suggestion: string) => {
+    const report = (path: any, kind: 'fetch' | 'axios', description: string, suggestion: string) => {
       const line = getLineNumber(context.fileContent, path.node.start || 0);
-      findings.push({
-        ruleId: 'NO_REQUEST_TIMEOUT',
-        description,
-        severity: Severity.LOW,
-        confidence: 'medium',
-        filePath: context.filePath,
-        line,
-        snippet: extractSnippet(context.fileContent, line),
-        suggestion,
+      devRanges ??= collectDevOnlyRanges(context.ast);
+      if (isLineInRanges(line, devRanges)) return;
+      timeoutCandidates.push({
+        kind,
+        finding: {
+          ruleId: 'NO_REQUEST_TIMEOUT',
+          description,
+          severity: Severity.LOW,
+          confidence: 'medium',
+          filePath: context.filePath,
+          line,
+          snippet: extractSnippet(context.fileContent, line),
+          suggestion,
+        },
       });
     };
 
@@ -289,13 +394,20 @@ const noRequestTimeoutRule: Rule = {
         const { node } = path;
         
         // Check for fetch without timeout
-        if (node.callee.type === 'Identifier' && node.callee.name === 'fetch') {
-          const optionsArg = node.arguments[1];
-          
+        if (node.callee.type === 'Identifier' && node.callee.name === 'fetch' && isGlobalFetch(path)) {
+          if (isLocalResourceUrl(node.arguments[0], path)) return;
+          let optionsArg = node.arguments[1];
+          // `const init = { ... }; fetch(url, init)`: judge the object that is visible
+          if (optionsArg?.type === 'Identifier') {
+            const init = path.scope.getBinding(optionsArg.name)?.path?.node?.init;
+            if (init?.type === 'ObjectExpression') optionsArg = init;
+          }
+
           if (!optionsArg || optionsArg.type !== 'ObjectExpression') {
             if (!guardedByEnclosingFunction(path)) {
               report(
                 path,
+                'fetch',
                 'fetch() without timeout - a stalled server can hang the request indefinitely',
                 'Add timeout to fetch using AbortSignal with setTimeout, or use a library like axios with timeout config.'
               );
@@ -309,6 +421,7 @@ const noRequestTimeoutRule: Rule = {
             if (!hasTimeout && !guardedByEnclosingFunction(path)) {
               report(
                 path,
+                'fetch',
                 'fetch() without timeout configuration',
                 'Add timeout using AbortSignal: const controller = new AbortController(); setTimeout(() => controller.abort(), 30000);'
               );
@@ -331,6 +444,7 @@ const noRequestTimeoutRule: Rule = {
             if (!hasTimeout && !axiosDefaultTimeout && !guardedByEnclosingFunction(path)) {
               report(
                 path,
+                'axios',
                 'axios request without timeout configuration',
                 'Add timeout to axios config: { timeout: 30000 } to prevent hanging requests.'
               );
@@ -340,7 +454,7 @@ const noRequestTimeoutRule: Rule = {
       },
     });
 
-    return findings;
+    return [];
   },
 };
 
@@ -497,7 +611,7 @@ const insecureWebSocketRule: Rule = {
           (parent.type === 'ObjectProperty' &&
            parent.value === node &&
            parent.key &&
-           (parent.key.name || parent.key.value || '').toLowerCase().includes('url'))
+           propertyKeyName(parent).toLowerCase().includes('url'))
         ) {
           if (isInsecurePublicHttpUrl({ text: node.value, complete: true }, CLEARTEXT_WS)) {
             report(node, `Unencrypted WebSocket URL configured: "${node.value}"`);
@@ -545,7 +659,7 @@ const hardcodedIpAddressRule: Rule = {
         const isUrlContext = value.includes('://') || value.includes('http');
         const parent = path.parent;
         const isApiConfig = parent && parent.type === 'ObjectProperty' && parent.key &&
-          /url|host|endpoint|server|api|base/i.test(parent.key.name || parent.key.value || '');
+          /url|host|endpoint|server|api|base/i.test(propertyKeyName(parent));
 
         if (isUrlContext || isApiConfig) {
           const line = getLineNumber(context.fileContent, node.start || 0);
@@ -576,5 +690,6 @@ export const networkRules: RuleGroup = {
     weakTlsConfigurationRule,
     insecureWebSocketRule,
     hardcodedIpAddressRule,
+    nativeTlsValidationRule,
   ],
 };

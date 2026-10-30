@@ -53,11 +53,12 @@ export class HtmlReporter {
 
   private async buildHtml(result: ScanResult): Promise<string> {
     const { findings } = result;
+    const critical = findings.filter((f) => f.severity === "CRITICAL");
     const high = findings.filter((f) => f.severity === "HIGH");
     const medium = findings.filter((f) => f.severity === "MEDIUM");
     const low = findings.filter((f) => f.severity === "LOW");
 
-    const bodyContent = this.buildBodyContent(result, high, medium, low);
+    const bodyContent = this.buildBodyContent(result, critical, high, medium, low);
     const template = await this.loadTemplate();
     const version = await this.getPackageVersion();
 
@@ -67,7 +68,7 @@ export class HtmlReporter {
       .replace("{{VERSION}}", version);
   }
 
-  private buildBodyContent(result: ScanResult, high: Finding[], medium: Finding[], low: Finding[]): string {
+  private buildBodyContent(result: ScanResult, critical: Finding[], high: Finding[], medium: Finding[], low: Finding[]): string {
     const { findings, ignoredRules } = result;
 
     const ignoredRulesSection = ignoredRules && ignoredRules.length > 0 ? `
@@ -108,6 +109,10 @@ export class HtmlReporter {
         <div class="number">${findings.length}</div>
         <h3>Total</h3>
       </div>
+      <div class="summary-card critical" onclick="filterBySeverity('critical')" data-filter="critical">
+        <div class="number">${critical.length}</div>
+        <h3>Critical</h3>
+      </div>
       <div class="summary-card high" onclick="filterBySeverity('high')" data-filter="high">
         <div class="number">${high.length}</div>
         <h3>High</h3>
@@ -124,6 +129,7 @@ export class HtmlReporter {
     
     ${findings.length > 0 ? `
     <div class="findings">
+      ${this.renderFindings(critical, "CRITICAL")}
       ${this.renderFindings(high, "HIGH")}
       ${this.renderFindings(medium, "MEDIUM")}
       ${this.renderFindings(low, "LOW")}

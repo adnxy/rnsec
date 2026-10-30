@@ -85,3 +85,24 @@ test('CERT_PINNING_DISABLED: react-native-ssl-pinning disableAllSecurity: true',
   assert.deepEqual(at(scan('rx-pinning-pos'), 'CERT_PINNING_DISABLED'), ['net.js:2:MEDIUM:high']);
   assert.deepEqual(byRule(scan('rx-pinning-neg'), 'CERT_PINNING_DISABLED'), []);
 });
+
+test('INSECURE_LINKING_OPEN: constants, fixed-host templates and i18n keys are clean; route, server and deep-link data fire', () => {
+  const r = scan('rnc-linking-origin');
+  const hits = byRule(r, 'INSECURE_LINKING_OPEN').map(f => `${f.line}:${f.confidence}`);
+  // 31 route params (medium), 37 server response (medium), 41 dynamic scheme/host and 45 bare parameter (low),
+  // 50 deep-link event (medium); 59 is guarded by startsWith + canOpenURL; 68 is hook state set from props (low),
+  // not a constant just because useState('') was seeded with one; 75 is stored data read through an imported model
+  assert.deepEqual(hits, ['31:medium', '37:medium', '41:low', '45:low', '50:medium', '68:low', '75:medium']);
+});
+
+test('CUSTOM_CRYPTO_IMPLEMENTATION: whole name tokens, primitives in the body, weak-digest key derivation kept', () => {
+  const r = scan('crypto-custom');
+  const hits = byRule(r, 'CUSTOM_CRYPTO_IMPLEMENTATION');
+  // XOR loop (6), rotate (11), S-box table (13), MD5-derived key and IV (14), call to a local xorEncrypt (20)
+  assert.deepEqual(hits.map(f => f.line), [6, 11, 13, 14, 20]);
+  for (const f of hits) {
+    assert.equal(f.severity, 'MEDIUM');
+    assert.equal(f.confidence, 'low');
+  }
+  assert.match(hits.find(f => f.line === 14).description, /MD5/);
+});
