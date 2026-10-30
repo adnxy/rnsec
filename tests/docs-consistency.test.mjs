@@ -78,3 +78,14 @@ test('every rule ID named in the newest CHANGELOG section exists', () => {
   const unknown = [...mentioned].filter(id => !ruleIds.has(id));
   assert.deepEqual(unknown, [], `CHANGELOG [${version}] names rule IDs that do not exist: ${unknown.join(', ')}`);
 });
+
+test('every rule ID named in the [Unreleased] CHANGELOG section exists', () => {
+  // `## [Unreleased]` has no x.y.z, so topChangelogSection() above skips it and checks the newest release
+  const start = changelog.indexOf('\n## [Unreleased]');
+  if (start === -1) return;
+  const next = changelog.indexOf('\n## [', start + 1);
+  const body = changelog.slice(start, next === -1 ? undefined : next);
+  const mentioned = new Set([...body.matchAll(/`([A-Z][A-Z0-9]*(?:_[A-Z0-9]+)+)`/g)].map(m => m[1]));
+  const unknown = [...mentioned].filter(id => !ruleIds.has(id));
+  assert.deepEqual(unknown, [], `CHANGELOG [Unreleased] names rule IDs that do not exist: ${unknown.join(', ')}`);
+});

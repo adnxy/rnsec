@@ -1,5 +1,13 @@
 # GitLab CI/CD Security Scan Configuration
 # Add this to your .gitlab-ci.yml file
+#
+# Exit codes of `rnsec scan`: 0 clean, 1 a finding at or above --fail-on, 2 rnsec error (bad option,
+# invalid config value, missing --path). The job below fails on both 1 and 2, after the reports are saved.
+# --owasp, --format and the critical severity need rnsec 1.5.0 or newer.
+#
+# GitLab has no SARIF report type (artifacts:reports takes GitLab's own formats), so rnsec.sarif is kept as a
+# plain job artifact: download it and open it in a SARIF viewer, or upload it to GitHub Code Scanning from
+# another system. security-report.json holds the findings plus the MASVS coverage section (--owasp).
 
 security-scan:
   stage: test
@@ -9,48 +17,67 @@ security-scan:
     - npm install -g rnsec
   
   script:
-    # Run security scan on changed files
+    # Merge requests: only the changed files feed the comment. Other pipelines: full scan.
+    # `cmd && rc=0 || rc=$?` keeps the exit code without stopping the script, so the comment
+    # is posted and the artifacts are saved before the job fails with that code.
     - |
       if [ -n "$CI_MERGE_REQUEST_TARGET_BRANCH_NAME" ]; then
-        rnsec scan --changed-files origin/$CI_MERGE_REQUEST_TARGET_BRANCH_NAME --md security-report.md --output security-report.json --silent
+        rnsec scan --changed-files origin/$CI_MERGE_REQUEST_TARGET_BRANCH_NAME --owasp --md security-report.md --output security-report.json --fail-on high --silent && SCAN_RC=0 || SCAN_RC=$?
       else
-        rnsec scan --md security-report.md --output security-report.json --silent
+        rnsec scan --owasp --md security-report.md --output security-report.json --fail-on high --silent && SCAN_RC=0 || SCAN_RC=$?
       fi
+      echo "rnsec exit code: $SCAN_RC"
+    
+    # Full-project SARIF for tools that read it. Not produced from the changed-files scan above:
+    # a partial report would look like the other files were fixed.
+    - |
+      rnsec scan --sarif rnsec.sarif --fail-on none --silent
     
     # Post comment to merge request
     - |
-      if [ -n "$CI_MERGE_REQUEST_IID" ]; then
-        REPORT=$(cat security-report.md)
+      if [ -n "$CI_MERGE_REQUEST_IID" ] && [ -n "$GITLAB_TOKEN" ]; then
+        # The comment is best effort (needs curl and jq in the image): a failure here must not fail the job
+        # or hide the scan result, which is decided by `exit $SCAN_RC` below.
+        (
+          set -e
+          REPORT=$(cat security-report.md)
         
-        # Escape JSON special characters
-        REPORT_JSON=$(echo "$REPORT" | jq -Rs .)
+          # Escape JSON special characters
+          REPORT_JSON=$(echo "$REPORT" | jq -Rs .)
         
-        # Check for existing comment
-        EXISTING_COMMENT=$(curl --silent --header "PRIVATE-TOKEN: $GITLAB_TOKEN" \
-          "$CI_API_V4_URL/projects/$CI_PROJECT_ID/merge_requests/$CI_MERGE_REQUEST_IID/notes" \
-          | jq '.[] | select(.body | contains("<!-- rnsec-security-report -->")) | .id' | head -1)
+          # Check for existing comment
+          EXISTING_COMMENT=$(curl --silent --header "PRIVATE-TOKEN: $GITLAB_TOKEN" \
+            "$CI_API_V4_URL/projects/$CI_PROJECT_ID/merge_requests/$CI_MERGE_REQUEST_IID/notes" \
+            | jq '.[] | select(.body | contains("<!-- rnsec-security-report -->")) | .id' | head -1)
         
-        if [ -n "$EXISTING_COMMENT" ]; then
-          # Update existing comment
-          curl --request PUT --header "PRIVATE-TOKEN: $GITLAB_TOKEN" \
-            --header "Content-Type: application/json" \
-            --data "{\"body\": $REPORT_JSON}" \
-            "$CI_API_V4_URL/projects/$CI_PROJECT_ID/merge_requests/$CI_MERGE_REQUEST_IID/notes/$EXISTING_COMMENT"
-          echo "Updated existing security report comment"
-        else
-          # Create new comment
-          curl --request POST --header "PRIVATE-TOKEN: $GITLAB_TOKEN" \
-            --header "Content-Type: application/json" \
-            --data "{\"body\": $REPORT_JSON}" \
-            "$CI_API_V4_URL/projects/$CI_PROJECT_ID/merge_requests/$CI_MERGE_REQUEST_IID/notes"
-          echo "Created new security report comment"
-        fi
+          if [ -n "$EXISTING_COMMENT" ]; then
+            # Update existing comment
+            curl --request PUT --header "PRIVATE-TOKEN: $GITLAB_TOKEN" \
+              --header "Content-Type: application/json" \
+              --data "{\"body\": $REPORT_JSON}" \
+              "$CI_API_V4_URL/projects/$CI_PROJECT_ID/merge_requests/$CI_MERGE_REQUEST_IID/notes/$EXISTING_COMMENT" \
+              && echo "Updated existing security report comment"
+          else
+            # Create new comment
+            curl --request POST --header "PRIVATE-TOKEN: $GITLAB_TOKEN" \
+              --header "Content-Type: application/json" \
+              --data "{\"body\": $REPORT_JSON}" \
+              "$CI_API_V4_URL/projects/$CI_PROJECT_ID/merge_requests/$CI_MERGE_REQUEST_IID/notes" \
+              && echo "Created new security report comment"
+          fi
+        ) || echo "Could not post the merge request comment; the scan result is not affected"
       fi
+    
+    # Fail the job (and so the pipeline) when rnsec reported findings or an error
+    - exit $SCAN_RC
   
   artifacts:
+    # Without `when: always` GitLab drops the artifacts exactly when the scan fails the job
+    when: always
     paths:
       - security-report.md
       - security-report.json
+      - rnsec.sarif
     expire_in: 30 days
   
   only:
@@ -58,7 +85,8 @@ security-scan:
     - main
     - develop
   
-  allow_failure: true
+  # No allow_failure: findings at or above --fail-on block the pipeline. Use --fail-on none (or
+  # allow_failure: true) to report without blocking.
 
 # Required GitLab CI/CD Variables:
 # - GITLAB_TOKEN: Personal access token with api scope

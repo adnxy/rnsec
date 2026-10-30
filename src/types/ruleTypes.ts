@@ -66,12 +66,14 @@ export interface RnsecConfig {
   };
   exclude?: string[]
   /** Exit non-zero when a finding at or above this level is reported (default: high) */
-  failOn?: 'high' | 'medium' | 'low' | 'none';
+  failOn?: 'critical' | 'high' | 'medium' | 'low' | 'none';
   /** Per-rule severity overrides, e.g. { "INSECURE_HTTP_URL": "LOW" } */
-  severityOverrides?: Record<string, 'HIGH' | 'MEDIUM' | 'LOW'>;
+  severityOverrides?: Record<string, 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW'>;
   /** Path to a baseline file (relative to the scan root); listed findings are not reported */
   baseline?: string;
   /** Skip files that git ignores (default true; tracked files are always scanned) */
   respectGitignore?: boolean;
+  /** Same as --owasp: attach MASVS/MASWE/MASTG/CWE data and a MASVS coverage section to the report */
+  owasp?: boolean;
   // Future: other config options
 }

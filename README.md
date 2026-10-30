@@ -10,6 +10,14 @@ A zero-configuration security scanner for React Native and Expo applications tha
 
 ---
 
+## What's new in 1.5.0
+
+- **OWASP mapping (`--owasp`)**: findings carry OWASP MASVS 2.1.0 / MASWE / MASTG / CWE references, and `--owasp` adds a MASVS coverage report (`failed`, `checked`, `not-applicable`, `not-assessed`) plus `rnsec rules --owasp`. 100 of the 106 rules are mapped. Static analysis does not establish MASVS compliance. See [OWASP MASVS / MASWE / MASTG](#owasp-masvs--maswe--mastg).
+- **`--format console|json|sarif`**, a **CRITICAL** severity (`--fail-on critical`), SARIF rules with MASVS/MASWE/CWE tags and help links, and `app.config.js` / `app.config.ts` support for three Expo rules. 106 rules in total.
+- **Behaviour changes**: errors now exit `2` (findings still exit `1`), `rnsec scan -p <missing directory>` fails instead of scanning zero files, and findings are sorted deterministically. See the [CHANGELOG](CHANGELOG.md#150---2026-10-30).
+
+---
+
 ## What's new in 1.4.0
 
 - **18 new rules (105 total)**: committed signing keys and service accounts, hardcoded Android signing passwords, secrets in `eas.json` and bundled env vars, insecure `.npmrc`/`.yarnrc.yml`, `network_security_config.xml` checks, JWT/OAuth/SQLite/MMKV/cipher misuse and more. See the [CHANGELOG](CHANGELOG.md) for the full list.
@@ -96,9 +104,20 @@ rnsec scan --silent --output results.json
 rnsec scan --json
 ```
 
+**Add OWASP MASVS data and a coverage report:**
+```bash
+rnsec scan --owasp
+```
+
+**SARIF on stdout (redirect it to a file):**
+```bash
+rnsec scan --format sarif > rnsec.sarif
+```
+
 **View all security rules:**
 ```bash
 rnsec rules
+rnsec rules --owasp   # with each rule's MASVS and MASWE ids
 ```
 
 **Scan only changed files:**
@@ -119,11 +138,13 @@ Options:
   --html <filename>      Custom HTML report filename
   --output <filename>    Custom JSON report filename
   --md <filename>        Generate Markdown report for PR comments
-  --json                 Output JSON to console only (no HTML/JSON files are written)
+  --json                 Output JSON to console only (no HTML/JSON files are written); same as --format json
+  --format <format>      What stdout carries: console (default), json or sarif. json and sarif write no report files
+  --owasp                Add OWASP MASVS/MASWE/MASTG/CWE data to findings and a MASVS coverage section
   --silent               Suppress console output
   --changed-files <ref>  Scan only files changed since git reference (branch, commit, or tag)
   --min-confidence <l>   Only report findings at or above this confidence: low (default), medium, high
-  --fail-on <level>      Exit 1 when a finding at or above this severity is reported: high (default), medium, low, none
+  --fail-on <level>      Exit 1 when a finding at or above this severity is reported: critical, high (default, includes critical), medium, low, none
   --sarif <filename>     Generate a SARIF 2.1.0 report (e.g. rnsec.sarif) for GitHub Code Scanning
   --baseline <filename>  Hide findings that are listed in this baseline file
   --write-baseline <f>   Write the current findings to a baseline file and exit 0
@@ -135,13 +156,20 @@ Options:
 Notes:
 
 - `--json` prints the result to stdout and nothing else: informational lines go to stderr, so `rnsec scan --json | jq` works. It ignores `--html` and `--output`. `--md` and `--sarif` files are still written.
-- Without `--json`, rnsec writes `rnsec-report.html` and `rnsec-report.json` into the current directory (or the names you give with `--html` and `--output`).
+- `--format json` is the same as `--json`. `--format sarif` prints the SARIF 2.1.0 document to stdout (use `> rnsec.sarif`, or `--sarif <file>` to get the same text in a file) and writes no report files either. `--json` cannot be combined with another `--format`, and an unknown `--format` value is an error (exit `2`).
+- Without `--json` or `--format`, rnsec writes `rnsec-report.html` and `rnsec-report.json` into the current directory (or the names you give with `--html` and `--output`), also with `--silent`, which only suppresses the console report. `--silent` does not affect `--json` and `--format` output.
+- `--owasp` is described in [OWASP MASVS / MASWE / MASTG](#owasp-masvs--maswe--mastg).
 - `--changed-files` needs a git checkout.
 
 ### Exit Codes
 
-- `0` - No finding at or above the `--fail-on` threshold (default `high`, so only HIGH findings fail the build)
-- `1` - A finding at or above the threshold was reported, or rnsec hit an error (invalid option value, unreadable baseline, `--changed-files` outside a git repository, ...)
+- `0` - No finding at or above the `--fail-on` threshold (default `high`, which includes `critical`), or `--help` / `--version`
+- `1` - A finding at or above the threshold was reported
+- `2` - rnsec hit an error: invalid option or option value (`--fail-on`, `--format`, `--min-confidence`, an unknown flag), a `--path` that is not a directory, an invalid config value (`failOn`, `severityOverrides`, `owasp`), an unreadable baseline, `--changed-files` outside a git repository, ...
+
+**Changed in 1.5.0:** errors used to exit `1`, the same code as findings, so a CI job could not tell "the scan found issues" from "the scan did not run". Errors now exit `2`. Also, `rnsec scan -p <missing directory>` used to look like a clean scan of zero files and now exits `2` with an error. If a script treats every non-zero exit as "findings", it keeps working; a script that compares the code with `1` must also handle `2`.
+
+Severity levels are `CRITICAL`, `HIGH`, `MEDIUM` and `LOW`. A finding is `CRITICAL` only when it alone gives direct privileged access, or lets an attacker defeat a core control, with no further precondition, and detection is high precision. Today that is `COMMITTED_CREDENTIAL_FILE` for a service-account JSON or `.p8` file holding an unencrypted PEM private key; any other rule can be raised through [`severityOverrides`](#changing-a-rules-severity). `--fail-on critical` fails only on critical findings, and every other level also fails on everything above it.
 
 `--fail-on none` never fails on findings, and `--write-baseline` always exits 0. The threshold can also be set with `failOn` in the [config file](#configuration); the command line wins.
 
@@ -189,12 +217,16 @@ In CI checkouts there is usually no local branch for the target, so use `origin/
   run: rnsec scan --changed-files "origin/$BASE_REF" --output security.json --silent
 ```
 
+A full example with SARIF upload and a `--fail-on` gate is in [`examples/github-actions/security-scan.yml`](examples/github-actions/security-scan.yml).
+
 **GitLab CI:**
 ```yaml
 security-scan:
   script:
     - rnsec scan --changed-files origin/$CI_MERGE_REQUEST_TARGET_BRANCH_NAME --output security.json --silent
 ```
+
+See [`examples/gitlab-ci/security-scan.yml`](examples/gitlab-ci/security-scan.yml) for the full job.
 
 ### Benefits
 
@@ -242,7 +274,7 @@ rnsec scan --changed-files main --md pr-security-report.md --silent
 
 ### GitHub Actions Workflow
 
-Copy the example workflow from `examples/github-actions/security-scan.yml`:
+A simplified variant of [`examples/github-actions/security-scan.yml`](examples/github-actions/security-scan.yml), which also gates the job with `--fail-on` and uploads SARIF (see [GitHub Code Scanning](#github-code-scanning-sarif)):
 
 ```yaml
 name: 🔒 Security Scan
@@ -267,8 +299,7 @@ jobs:
     - name: Run security scan
       env:
         BASE_REF: ${{ github.base_ref || 'main' }}
-      run: rnsec scan --changed-files "origin/$BASE_REF" --md security-report.md --output rnsec-report.json --silent
-      continue-on-error: true
+      run: rnsec scan --changed-files "origin/$BASE_REF" --md security-report.md --output rnsec-report.json --fail-on none --silent
     
     - name: Comment PR with security results
       uses: actions/github-script@v7
@@ -307,7 +338,7 @@ jobs:
 ### Multi-Platform Support
 
 #### GitLab CI/CD
-See `examples/gitlab-ci/security-scan.yml` for GitLab merge request integration.
+See [`examples/gitlab-ci/security-scan.yml`](examples/gitlab-ci/security-scan.yml) for GitLab merge request integration (`--fail-on` gate, SARIF and JSON artifacts).
 
 #### Bitbucket Pipelines
 See `examples/bitbucket-pipelines/bitbucket-pipelines.yml` for Bitbucket pull request integration.
@@ -355,7 +386,126 @@ jobs:
           sarif_file: rnsec.sarif
 ```
 
-The step uses `if: always()` so the report is uploaded even when `rnsec scan` exits 1 because of HIGH findings. Add `--fail-on none` if the upload should be the only gate. Finding paths in the report are relative to the git repository root, and each result carries a stable fingerprint so GitHub can track alerts across commits.
+The step uses `if: always()` so the report is uploaded even when `rnsec scan` exits 1 because of HIGH findings. Add `--fail-on none` if the upload should be the only gate. If `rnsec scan` itself fails (exit `2`) no SARIF file is written and the upload step has nothing to send; the example workflow guards it with `hashFiles('rnsec.sarif') != ''`. Always upload a full-project scan: a `--changed-files` report would make Code Scanning close the alerts of every file it did not scan.
+
+Rules carry their MASVS and MASWE ids, CWE tags and a `helpUri` in the SARIF report, and the MASVS controls are published as a taxonomy, whether or not `--owasp` is set (see [OWASP MASVS / MASWE / MASTG](#owasp-masvs--maswe--mastg)). `--format sarif` prints the same document to stdout; redirect it (`rnsec scan --format sarif > rnsec.sarif`) if you prefer that to `--sarif <file>`. Full workflow: [`examples/github-actions/security-scan.yml`](examples/github-actions/security-scan.yml). Finding paths in the report are relative to the git repository root, and each result carries a stable fingerprint so GitHub can track alerts across commits.
+
+## OWASP MASVS / MASWE / MASTG
+
+rnsec maps its rules to the [OWASP Mobile Application Security](https://mas.owasp.org/) standards, so findings and CI reports speak the same language as a mobile security review. The mapping is pinned to these versions (vendored in `src/standards/owasp/snapshot.json`; only IDs that exist in it are accepted):
+
+| Standard | Pinned version | Used for |
+|----------|----------------|----------|
+| OWASP MASVS | 2.1.0: eight categories (STORAGE, CRYPTO, AUTH, NETWORK, PLATFORM, CODE, RESILIENCE, PRIVACY) and 24 controls | The coverage report and `masvs` references |
+| OWASP MASWE | 1.0.0 | The weakness behind each rule (`maswe`) |
+| OWASP MASTG | v2.0.0 + master@2eb0f70 | Static tests that match a rule's check (`mastg`); runtime tests are not listed |
+
+`CWE` ids are listed where one fits. 100 of the 106 rules are mapped; the six that have no sound MASVS fit are listed with their reason in the [coverage matrix](docs/owasp-coverage.md#unmapped-rules). The matrix ([`docs/owasp-coverage.md`](docs/owasp-coverage.md)) shows, for every MASVS control, which rules map to it and whether it is automated, heuristic only or manual/dynamic, plus a reference table of all rules with severity, platform, confidence and standard ids. It is generated from the mapping (`npm run docs:owasp`) and a test fails when it is stale.
+
+### Using `--owasp`
+
+```bash
+npx rnsec scan                                  # findings only, as before
+npx rnsec scan --owasp                          # + OWASP references and MASVS coverage in the console report
+npx rnsec scan --owasp --format json            # JSON on stdout with `standards` per finding and an `owasp` section
+npx rnsec scan --owasp --format sarif           # SARIF on stdout (see below: the SARIF content does not depend on --owasp)
+npx rnsec scan --owasp --fail-on high           # same, and exit 1 on HIGH or CRITICAL findings
+npx rnsec rules --owasp                         # every rule with its MASVS and MASWE ids
+```
+
+`--owasp` (or `"owasp": true` in the [config file](#configuration)) changes the output like this:
+
+- **Console**: each mapped finding gets a line such as `OWASP: MASVS-STORAGE-1 · MASWE-0004 · CWE-798`, and a MASVS coverage section follows the summary.
+- **JSON** (`--json`, `--format json` and the `--output` file): each mapped finding gains `title`, `platform` and `standards` (`masvs`, `maswe`, `mastg`, `cwe`, `confidence`), and the result gains an `owasp` object with the pinned versions, a summary and one entry per control. Without `--owasp` neither exists.
+- **SARIF**: unchanged. SARIF output always carries the MASVS taxonomy, rule tags (`MASVS-*`, `MASWE-*`, `external/cwe/cwe-*`), relationships to the MASVS controls and a `helpUri` per rule, with or without `--owasp`.
+- **Markdown and HTML reports**: unchanged.
+- With `--changed-files` the coverage is labelled `"scope": "changed-files"` and its disclaimer says the scan covered only the changed files.
+
+Sample console output (`rnsec scan --owasp` on `examples/vulnerable-app`, long paths shortened by rnsec, rows omitted):
+
+```text
+   HIGH  Potential hardcoded secret in variable "JWT_TOKEN"
+      .../examples/vulnerable-app/App.tsx:12
+      OWASP: MASVS-STORAGE-1 · MASWE-0004 · CWE-798
+
+  OWASP MASVS 2.1.0 coverage (static analysis only)
+  ────────────────────────────────────────────────────────────
+  100 automated rules map to MASVS controls in this project
+  24 controls: 15 failed, 2 checked, 4 checked (heuristic), 0 not applicable, 3 not assessed
+
+    MASVS-AUTH-1         FAILED 4 findings 7 rules
+    MASVS-CODE-2         not assessed
+    MASVS-CODE-3         checked 6 rules
+    MASVS-NETWORK-2      checked 1 rule
+    MASVS-PRIVACY-2      checked (heuristic) 1 rule
+    MASVS-STORAGE-1      FAILED 14 findings 24 rules
+    ...
+
+  Static analysis does not establish MASVS compliance. This report lists which controls rnsec checked and where it found issues. Controls marked not-assessed need manual or dynamic verification (see the MASTG).
+```
+
+Sample JSON (`rnsec scan --owasp --format json`, same project, `filePath` shortened, controls omitted):
+
+```json
+{
+  "findings": [
+    {
+      "ruleId": "IOS_MISSING_APP_SNAPSHOT_PROTECTION",
+      "severity": "LOW",
+      "filePath": "/path/to/examples/vulnerable-app/App.tsx",
+      "line": 1,
+      "title": "No app snapshot protection",
+      "platform": ["ios"],
+      "standards": {
+        "masvs": ["MASVS-PLATFORM-3", "MASVS-STORAGE-2"],
+        "maswe": ["MASWE-0038"],
+        "mastg": [],
+        "cwe": [200],
+        "confidence": "low"
+      }
+    }
+  ],
+  "owasp": {
+    "standards": { "masvs": "2.1.0", "maswe": "1.0.0", "mastg": "v2.0.0 + master@2eb0f70" },
+    "scope": "project",
+    "summary": { "controls": 24, "failed": 15, "checked": 2, "checkedHeuristic": 4, "notApplicable": 0, "notAssessed": 3, "automatedRules": 100 },
+    "controls": [
+      {
+        "id": "MASVS-NETWORK-2",
+        "statement": "The app performs identity pinning for all remote endpoints under the developer's control.",
+        "status": "checked",
+        "rules": ["CERT_PINNING_DISABLED"],
+        "findings": 0
+      },
+      {
+        "id": "MASVS-CODE-2",
+        "statement": "The app has a mechanism for enforcing app updates.",
+        "status": "not-assessed",
+        "rules": [],
+        "findings": 0,
+        "reason": "No enabled automated rule maps to this control; verify manually or dynamically."
+      }
+    ]
+  }
+}
+```
+
+(The real output has the remaining finding fields, such as `description`, `suggestion` and `fingerprint`, all 24 controls and a `disclaimer`.)
+
+### Control statuses
+
+Each of the 24 MASVS controls gets exactly one status per scan:
+
+| Status (JSON value) | Meaning |
+|---------------------|---------|
+| `failed` | At least one reported finding maps to the control. |
+| `checked` | At least one enabled rule that applies to the project maps to the control and reported nothing. This is not a pass verdict: it only says what rnsec looked for. `checked-heuristic` is the same, but every such rule is a low-confidence presence/absence heuristic (for example "no root detection found"). |
+| `not-applicable` | Every enabled rule that maps to the control targets a platform the project does not have (for example only Android rules map to it and the project has just an `ios/` directory). |
+| `not-assessed` | No enabled rule maps to the control: it needs manual or dynamic verification (see the MASTG). Rules switched off with `ignoredRules` also leave their controls `not-assessed`. |
+
+### Limitations
+
+rnsec is static analysis of source code, configuration files and dependency metadata. **It does not verify MASVS compliance**, and a `checked` control is not a certified one: it only means the rules that map to it found nothing in the files rnsec can read. Controls that are `not-assessed` (in the pinned mapping: the update-enforcement control and two of the four privacy controls) need manual review or dynamic testing, and rnsec does not scan built APK/IPA files or run the app, so anything that only shows up in the compiled binary or at runtime is out of scope. Mappings are judgements: each rule lists a mapping confidence, and heuristic rules can miss issues or flag harmless code. Treat the coverage report as a map of what was automated, not as an assessment result.
 
 ## Baselines
 
@@ -379,7 +529,8 @@ rnsec supports configuration files to customize the scanning behavior. Create a 
 {
   "ignoredRules": ["ASYNCSTORAGE_SENSITIVE_KEY"],
   "exclude": ["**/scripts/**"],
-  "failOn": "high",                                // high (default) | medium | low | none
+  "failOn": "high",                                // critical | high (default) | medium | low | none
+  "owasp": false,                                  // true: same as --owasp
   "severityOverrides": { "INSECURE_HTTP_URL": "LOW" },
   "baseline": ".rnsec-baseline.json",
   "respectGitignore": true,                        // default
@@ -391,8 +542,9 @@ rnsec supports configuration files to customize the scanning behavior. Create a 
 |-----|-------------|
 | `ignoredRules` | Rule IDs that never run |
 | `exclude` | Extra glob patterns to skip (see [Excluding Files](#excluding-files)) |
-| `failOn` | Severity that makes `rnsec scan` exit 1; same values as `--fail-on`, which takes precedence |
-| `severityOverrides` | Map of rule ID to `HIGH`, `MEDIUM` or `LOW`; applied to the reports, SARIF and the exit code |
+| `failOn` | Severity that makes `rnsec scan` exit 1 (`critical`, `high`, `medium`, `low` or `none`); same values as `--fail-on`, which takes precedence |
+| `owasp` | `true` adds OWASP data and the MASVS coverage report, like `--owasp` (the flag cannot switch it off); must be a boolean (see [OWASP MASVS / MASWE / MASTG](#owasp-masvs--maswe--mastg)) |
+| `severityOverrides` | Map of rule ID to `CRITICAL`, `HIGH`, `MEDIUM` or `LOW`; applied to the reports, SARIF and the exit code |
 | `baseline` | Baseline file, relative to the scan root (see [Baselines](#baselines)) |
 | `respectGitignore` | `false` also scans git-ignored files, like `--no-gitignore` |
 | `npmVulnerabilityScanning` | `enabled`, `dataSource` (`npm-audit` or `hardcoded`) and `excludeDevDependencies` for the dependency checks |
@@ -425,7 +577,7 @@ Use `severityOverrides` to raise or lower a rule without disabling it, for examp
 }
 ```
 
-Unknown rule IDs print a warning, and an invalid severity is an error.
+Severities are `CRITICAL`, `HIGH`, `MEDIUM` and `LOW`. Unknown rule IDs print a warning, and an invalid severity is an error (exit `2`).
 
 ### Suppressing a Single Finding
 
@@ -464,7 +616,7 @@ Any pattern supported by `fast-glob` can be used, for more information see [Patt
 
 ## What It Detects
 
-rnsec identifies 105 different security issues across 13 categories:
+rnsec identifies 106 different security issues across 13 categories:
 
 **Common vulnerabilities found:**
 
@@ -487,7 +639,7 @@ const hash = MD5(password);
 
 ## Security Rules
 
-rnsec implements 105 security rules covering:
+rnsec implements 106 security rules covering:
 
 | Category | Rules | Description |
 |----------|-------|-------------|
@@ -502,10 +654,10 @@ rnsec implements 105 security rules covering:
 | **WebView** | 11 | JS injection, file access, origin whitelist, mixed content, navigation, postMessage, DOM storage, geolocation, caching, headers |
 | **Android** | 15 | Manifest security, exported components, backup, Keystore, `network_security_config.xml`, hardcoded signing passwords in Gradle |
 | **iOS** | 12 | App Transport Security, Keychain, pasteboard, file sharing, Info.plist, snapshot protection |
-| **Expo / EAS** | 6 | `app.json`/`app.config.*` settings and secrets, `eas.json` secrets, update URL and code signing, permissions |
+| **Expo / EAS** | 7 | `app.json`/`app.config.*` settings and secrets, `eas.json` secrets, update URL and code signing, permissions |
 | **Supply chain** | 5 | Vulnerable/deprecated dependencies, suspicious lifecycle scripts, non-registry dependency sources, insecure `.npmrc`/`.yarnrc.yml` |
 
-Run `rnsec rules` to list every rule with its default severity. Severity is the default: some rules report a lower or higher level depending on context, and `severityOverrides` can change it.
+Run `rnsec rules` to list every rule with its default severity (`rnsec rules --owasp` adds the MASVS and MASWE ids). Severity is the default: some rules report a lower or higher level depending on context, and `severityOverrides` can change it. The [OWASP coverage matrix](docs/owasp-coverage.md) lists every rule with its severity, platform, confidence and OWASP ids.
 
 ### API Key Detection
 
@@ -548,9 +700,24 @@ rnsec generates two report formats automatically, and can add more on request:
 
 ### Markdown and SARIF
 - `--md <file>` writes a Markdown report for pull request comments
-- `--sarif <file>` writes SARIF 2.1.0 for [GitHub Code Scanning](#github-code-scanning-sarif)
+- `--sarif <file>` writes SARIF 2.1.0 for [GitHub Code Scanning](#github-code-scanning-sarif); `--format sarif` prints it to stdout
+
+### OWASP data
+- `--owasp` adds OWASP MASVS/MASWE/MASTG/CWE references to findings and a MASVS coverage section to the console and JSON output (see [OWASP MASVS / MASWE / MASTG](#owasp-masvs--maswe--mastg))
 
 ## CI/CD Integration
+
+Ready-to-copy configurations live in [`examples/`](examples/):
+
+| CI system | File |
+|-----------|------|
+| GitHub Actions (SARIF upload to Code Scanning, PR comment, `--fail-on` gate) | [`examples/github-actions/security-scan.yml`](examples/github-actions/security-scan.yml) |
+| GitLab CI (`--fail-on` gate, SARIF and JSON artifacts, MR comment) | [`examples/gitlab-ci/security-scan.yml`](examples/gitlab-ci/security-scan.yml) |
+| Git pre-commit hooks (pre-commit framework, plain git hook, husky) | [`examples/pre-commit/`](examples/pre-commit/) |
+| Azure DevOps | [`examples/azure-devops/azure-pipelines.yml`](examples/azure-devops/azure-pipelines.yml) |
+| Bitbucket Pipelines | [`examples/bitbucket-pipelines/bitbucket-pipelines.yml`](examples/bitbucket-pipelines/bitbucket-pipelines.yml) |
+
+In the GitHub and GitLab examples the job fails when `rnsec scan` exits non-zero: `1` for findings at or above `--fail-on` (default `high`), `2` for an rnsec error (see [Exit Codes](#exit-codes)). Steps that must run after a failed scan (uploading reports or SARIF) need `if: always()` on GitHub or `artifacts: when: always` on GitLab. GitLab has no SARIF report type, so there the SARIF file is just a job artifact.
 
 ### GitHub Actions
 
@@ -678,6 +845,30 @@ stage('Security Scan') {
 }
 ```
 
+## Local Development Workflow
+
+Install rnsec as a dev dependency so every developer and CI job uses the same version:
+
+```bash
+npm install --save-dev rnsec
+```
+
+```jsonc
+// package.json
+"scripts": {
+  "security": "rnsec scan --fail-on high",
+  "security:owasp": "rnsec scan --owasp"
+}
+```
+
+```bash
+npm run security                       # fails (exit 1) on HIGH or CRITICAL findings
+npx rnsec scan --changed-files main    # only the files your branch changed (tracked, staged files included)
+npx rnsec scan --owasp                 # also show the MASVS coverage
+```
+
+A pre-commit hook runs the same command before each commit: see [`examples/pre-commit/`](examples/pre-commit/). Console scans write `rnsec-report.html` and `rnsec-report.json` into the working directory, so add them to `.gitignore`. To adopt rnsec on an existing codebase, record a [baseline](#baselines) first.
+
 ## Examples
 
 Test rnsec with included sample projects:
@@ -703,7 +894,7 @@ rnsec scan --path examples/secure-app
 One command with zero configuration required. Works out of the box with any React Native or Expo project.
 
 ### Comprehensive
-105 security rules covering all major vulnerability categories from OWASP Mobile Top 10 to platform-specific issues.
+106 security rules for Android, iOS, React Native and Expo, 100 of them mapped to OWASP MASVS 2.1.0 controls and MASWE weaknesses (see the [coverage matrix](docs/owasp-coverage.md)). rnsec does not claim to cover the OWASP Mobile Top 10 or to verify MASVS compliance.
 
 ### Fast
 Scans complete projects in seconds using efficient static analysis techniques.
@@ -728,9 +919,11 @@ rnsec uses static analysis to examine your codebase without executing it:
 5. **Platform Scanners**: Checks Android and iOS configuration files
 6. **Reporter**: Generates HTML and JSON reports
 
+Design note: the OWASP snapshot (`src/standards/owasp/snapshot.json`) and the rule mapping (`RULE_STANDARDS` in `src/standards/owasp/mappings.ts`) do not depend on how a finding was produced. A future analyzer for built binaries or running apps that emits `Finding`s whose `ruleId`s are listed in `RULE_STANDARDS` would reuse the same `--owasp` enrichment, MASVS coverage and SARIF output unchanged. Only static analysis of source, configuration and dependency metadata exists today.
+
 ## Contributing
 
-Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for details.
+Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for details, and [docs/adding-rules.md](docs/adding-rules.md) for how to add a rule (including its OWASP mapping).
 
 ### Ways to Contribute
 
@@ -788,7 +981,8 @@ rnsec is a static analysis tool with inherent limitations:
 
 - **No Runtime Analysis**: Cannot detect issues that only appear during execution
 - **No Network Testing**: Does not test actual API endpoints or network security
-- **No Binary Analysis**: Does not analyze compiled native code
+- **No Binary Analysis**: Does not analyze compiled native code; APK and IPA files are not scanned
+- **No MASVS verification**: The [OWASP mapping](#owasp-masvs--maswe--mastg) shows which controls rules were run against, not that the app complies; `not-assessed` controls need manual or dynamic testing
 - **Pattern-Based Detection**: May produce false positives or miss context-dependent issues
 - **Configuration Required**: Some security measures may be configured outside the codebase
 - **Native and Expo configuration**: `network_security_config.xml` is scanned directly, not resolved through the manifest's `android:networkSecurityConfig`; Expo config rules read only literal values in `app.config.js|ts`; CodePush code signing is not checked (Expo Updates signing is)

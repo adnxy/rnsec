@@ -25,8 +25,8 @@ test('--fail-on: default high, medium/low thresholds, none, invalid', () => {
   assert.equal(run(['-p', h, '--json']).status, 1, 'HIGH fails by default');
   assert.equal(run(['-p', h, '--json', '--fail-on', 'none']).status, 0);
   const bad = run(['-p', dir, '--json', '--fail-on', 'bogus']);
-  assert.equal(bad.status, 1);
-  assert.match(bad.stderr, /--fail-on must be high, medium, low or none/);
+  assert.equal(bad.status, 2, 'usage errors exit 2');
+  assert.match(bad.stderr, /--fail-on must be critical, high, medium, low or none/);
 });
 
 test('config failOn applies, and the CLI flag beats it', () => {
@@ -34,7 +34,9 @@ test('config failOn applies, and the CLI flag beats it', () => {
   assert.equal(run(['-p', dir, '--json']).status, 1);
   assert.equal(run(['-p', dir, '--json', '--fail-on', 'none']).status, 0);
   const bad = untrackedProject({ 'src/a.js': medium, '.rnsec.json': '{ "failOn": "nope" }' });
-  assert.match(run(['-p', bad, '--json']).stderr, /"failOn" in the config must be/);
+  const badRun = run(['-p', bad, '--json']);
+  assert.equal(badRun.status, 2);
+  assert.match(badRun.stderr, /"failOn" in the config must be/);
 });
 
 test('severityOverrides change severity in output and exit code', () => {
@@ -54,10 +56,10 @@ test('severityOverrides change severity in output and exit code', () => {
   assert.ok(byRule(d, 'API_KEY_EXPOSED').every(f => f.severity === 'LOW'));
   assert.equal(d.exitCode, 0, 'downgraded finding no longer fails the build');
 
-  const invalid = untrackedProject({ 'src/a.js': medium, '.rnsec.json': '{ "severityOverrides": { "INSECURE_HTTP_URL": "CRITICAL" } }' });
+  const invalid = untrackedProject({ 'src/a.js': medium, '.rnsec.json': '{ "severityOverrides": { "INSECURE_HTTP_URL": "SEVERE" } }' });
   const bad = run(['-p', invalid, '--json']);
-  assert.equal(bad.status, 1);
-  assert.match(bad.stderr, /severityOverrides\["INSECURE_HTTP_URL"\] must be HIGH, MEDIUM or LOW/);
+  assert.equal(bad.status, 2);
+  assert.match(bad.stderr, /severityOverrides\["INSECURE_HTTP_URL"\] must be CRITICAL, HIGH, MEDIUM or LOW/);
 });
 
 test('findings carry a stable fingerprint in JSON output', () => {
@@ -117,7 +119,7 @@ test('baseline: exit code is computed after filtering; config baseline key works
 test('baseline: missing or invalid file is a clear error', () => {
   const dir = untrackedProject({ 'src/a.js': medium });
   const missing = run(['-p', dir, '--json', '--baseline', join(scratch(), 'nope.json')]);
-  assert.equal(missing.status, 1);
+  assert.equal(missing.status, 2);
   assert.match(missing.stderr, /Could not read baseline/);
   const bogus = join(scratch(), 'bogus.json');
   writeFileSync(bogus, '{"hello":1}');
@@ -151,7 +153,7 @@ test('SARIF: rules are complete, unique, and well-formed', () => {
   const rules = sarif.runs[0].tool.driver.rules;
   assert.ok(rules.length > 50, 'every registered rule is emitted');
   assert.equal(new Set(rules.map(r => r.id)).size, rules.length);
-  const levels = { error: '8.0', warning: '5.5', note: '3.0' };
+  const levels = { error: ['8.0', '9.5'], warning: ['5.5'], note: ['3.0'] };
   for (const r of rules) {
     assert.ok(r.name.length > 0 && r.name.length <= 255);
     assert.match(r.name, /^[A-Za-z0-9]+$/);
@@ -159,7 +161,7 @@ test('SARIF: rules are complete, unique, and well-formed', () => {
     assert.ok(r.help.text && r.help.markdown);
     assert.ok(r.properties.tags.includes('security'));
     assert.ok(r.properties.precision);
-    assert.equal(r.properties['security-severity'], levels[r.defaultConfiguration.level]);
+    assert.ok(levels[r.defaultConfiguration.level].includes(r.properties['security-severity']));
     assert.equal(typeof r.properties['security-severity'], 'string');
   }
   const http = rules.find(r => r.id === 'INSECURE_HTTP_URL');
@@ -244,7 +246,7 @@ test('--sarif does not disturb pure-JSON stdout', () => {
   const dir = untrackedProject({ 'src/a.js': medium });
   const out = join(scratch(), 'x.sarif');
   const r = run(['-p', dir, '--json', '--sarif', out, '--baseline', join(scratch(), 'none.json')]);
-  assert.equal(r.status, 1);
+  assert.equal(r.status, 2);
   const ok = run(['-p', dir, '--json', '--sarif', out]);
   assert.doesNotThrow(() => JSON.parse(ok.stdout));
 });

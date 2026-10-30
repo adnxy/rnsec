@@ -11,15 +11,15 @@ import { extractSnippet } from '../../utils/stringUtils.js';
 // objects (plain literals only), so each rule is written once.
 // ---------------------------------------------------------------------------
 
-type Node =
-  | { t: 'obj'; line: number; props: Map<string, Node> }
+export type Node =
+  | { t: 'obj'; line: number; props: Map<string, Node>; spread?: { before: Set<string> } }
   | { t: 'arr'; line: number; items: Node[] }
   | { t: 'str'; line: number; v: string }
   | { t: 'bool'; line: number; v: boolean }
   | { t: 'other'; line: number }; // numbers, null, expressions: never inspected
 
 const obj = (n: Node | undefined) => (n && n.t === 'obj' ? n : undefined);
-const prop = (n: Node | undefined, ...path: string[]): Node | undefined => {
+export const prop = (n: Node | undefined, ...path: string[]): Node | undefined => {
   let cur: Node | undefined = n;
   for (const key of path) {
     cur = obj(cur)?.props.get(key);
@@ -27,7 +27,7 @@ const prop = (n: Node | undefined, ...path: string[]): Node | undefined => {
   }
   return cur;
 };
-const isTrue = (n: Node | undefined) => n?.t === 'bool' && n.v === true;
+export const isTrue = (n: Node | undefined) => n?.t === 'bool' && n.v === true;
 
 /** Small JSON parser that records line numbers; tolerates comments and trailing commas. */
 function parseJsonNode(text: string): Node | null {
@@ -133,14 +133,20 @@ function astToNode(n: any): Node {
       return { t: 'arr', line, items: n.elements.map((e: any) => astToNode(e)) };
     case 'ObjectExpression': {
       const props = new Map<string, Node>();
+      let spread: { before: Set<string> } | undefined;
       for (const p of n.properties) {
+        if (p.type === 'SpreadElement') {
+          // `...config` may override or supply any key: remember what was defined before the first spread
+          spread ??= { before: new Set(props.keys()) };
+          continue;
+        }
         if (p.type !== 'ObjectProperty' || p.computed) continue;
         const key = p.key.type === 'Identifier' ? p.key.name : p.key.type === 'StringLiteral' ? p.key.value : null;
         if (key === null) continue;
         const v = astToNode(p.value);
         props.set(key, { ...v, line: p.loc?.start?.line ?? v.line } as Node);
       }
-      return { t: 'obj', line, props };
+      return { t: 'obj', line, props, ...(spread ? { spread } : {}) };
     }
     default:
       return { t: 'other', line };
@@ -210,6 +216,31 @@ function loadTree(context: RuleContext, names: (name: string) => boolean): { roo
 
 /** `expo` wrapper when present, otherwise the top-level object (app.config.json may omit it). */
 const expoRoot = (root: Node): Node | undefined => (obj(prop(root, 'expo')) ? prop(root, 'expo') : obj(root));
+
+/**
+ * A value that can be trusted statically: every object on the path is a plain literal and no
+ * dynamic spread (`...config`) comes after the key and could replace it.
+ */
+export function established(root: Node | undefined, ...path: string[]): Node | undefined {
+  let cur: Node | undefined = root;
+  for (const key of path) {
+    const o = obj(cur);
+    if (!o || o.spread?.before.has(key)) return undefined;
+    cur = o.props.get(key);
+    if (!cur) return undefined;
+  }
+  return cur;
+}
+
+/** `expo` object of a static app.config.js/ts (null for other files or when no literal object is exported). */
+export function loadJsExpoConfig(context: RuleContext): Node | null {
+  if (!JS_CONFIG.test(baseName(context.filePath))) return null;
+  const tree = loadTree(context, n => JS_CONFIG.test(n));
+  if (!tree) return null;
+  // `{ expo: {...}, ...dynamic }`: the spread could replace the whole expo object
+  if (obj(tree.root)?.spread?.before.has('expo')) return null;
+  return expoRoot(tree.root) ?? null;
+}
 
 function nativeDirExists(context: RuleContext, platform: 'android' | 'ios'): boolean {
   const roots = new Set([context.project?.rootDir ?? dirname(context.filePath), dirname(context.filePath)]);
@@ -513,7 +544,63 @@ const easEnvSecretRule: Rule = {
   },
 };
 
+// ---------------------------------------------------------------------------
+// 4. EXPO_PUBLIC_ENV_SECRET
+// ---------------------------------------------------------------------------
+
+const EXPO_PUBLIC_PREFIX = 'EXPO_PUBLIC_';
+
+/** Values that are public by construction even under a secret-looking name (publishable keys, URLs). */
+const PUBLIC_VALUE = /^(pk_(live|test)_|pk\.ey|https?:\/\/)/i;
+
+/** `KEY=value` / `export KEY="value"` lines of a dotenv file; unquoted values stop at ` #`. */
+function parseEnvLine(raw: string): { name: string; value: string } | null {
+  const m = /^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/.exec(raw);
+  if (!m) return null;
+  let value = m[2].trim();
+  const quote = value[0] === '"' || value[0] === "'" ? value[0] : '';
+  if (quote) {
+    const end = value.indexOf(quote, 1);
+    if (end === -1) return null; // multi-line value: not read
+    value = value.slice(1, end);
+  } else {
+    value = value.replace(/\s+#.*$/, '');
+  }
+  return { name: m[1], value };
+}
+
+const expoPublicEnvSecretRule: Rule = {
+  id: 'EXPO_PUBLIC_ENV_SECRET',
+  description: 'Secret stored in an EXPO_PUBLIC_ variable of a .env file; Expo inlines these values into the app bundle',
+  severity: Severity.HIGH,
+  fileTypes: ['.env*'],
+  apply: async (context: RuleContext): Promise<Finding[]> => {
+    if (!baseName(context.filePath).startsWith('.env')) return [];
+    const findings: Finding[] = [];
+    context.fileContent.split(/\r?\n/).forEach((raw, i) => {
+      const entry = parseEnvLine(raw);
+      if (!entry || !entry.name.startsWith(EXPO_PUBLIC_PREFIX)) return;
+      if (isPlaceholder(entry.value) || PUBLIC_VALUE.test(entry.value)) return;
+      // the name behind the prefix: only the conservative secret-name classifier, same as BUNDLED_ENV_SECRET
+      const bare = entry.name.slice(EXPO_PUBLIC_PREFIX.length);
+      const severity = classifySecretName(bare) ?? (isCredentialTokenName(bare) ? Severity.HIGH : null);
+      if (!severity) return;
+      findings.push({
+        ...finding(
+          context, 'EXPO_PUBLIC_ENV_SECRET', i + 1, severity, 'medium',
+          `"${entry.name}" looks like a secret and has a literal value, but EXPO_PUBLIC_ variables are inlined into the JavaScript bundle`,
+          'Expo replaces process.env.EXPO_PUBLIC_* with the literal value at build time, so anyone who downloads the app can read it. Naming a secret this way publishes it.',
+          'Keep the secret on a backend and call that from the app, or drop the EXPO_PUBLIC_ prefix if only build tooling needs it. If the value is actually public, rename it so it does not look like a secret.'
+        ),
+        // never echo the value itself into reports
+        snippet: `${entry.name}=<redacted>`,
+      });
+    });
+    return findings;
+  },
+};
+
 export const expoConfigRules: RuleGroup = {
   category: RuleCategory.CONFIG,
-  rules: [insecureSettingsRule, sensitiveConfigRule, easEnvSecretRule],
+  rules: [insecureSettingsRule, sensitiveConfigRule, easEnvSecretRule, expoPublicEnvSecretRule],
 };

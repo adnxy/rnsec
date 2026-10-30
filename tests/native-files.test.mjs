@@ -141,12 +141,14 @@ test('COMMITTED_CREDENTIAL_FILE: tracked keystores/certs/profiles', () => {
     'android/app/debug.keystore': randomBytes(64),
     'ios/cert.p12': randomBytes(64),
     'ios/AuthKey_ABC.p8': randomBytes(64),
+    'ios/AuthKey_PEM.p8': '-----BEGIN ' + 'PRIVATE KEY-----\n' + randomBytes(48).toString('base64') + '\n-----END ' + 'PRIVATE KEY-----\n',
     'ios/profile.mobileprovision': randomBytes(64),
   };
   const r = scan(gitProject(files));
   const got = byRule(r, 'COMMITTED_CREDENTIAL_FILE').map(f => `${f.filePath.split('/').pop()}:${f.line}:${f.severity}:${f.confidence}`).sort();
   assert.deepEqual(got, [
     'AuthKey_ABC.p8:1:HIGH:high',
+    'AuthKey_PEM.p8:1:CRITICAL:high',
     'cert.p12:1:HIGH:high',
     'profile.mobileprovision:1:MEDIUM:high',
     'release.keystore:1:HIGH:high',
@@ -180,7 +182,7 @@ test('COMMITTED_CREDENTIAL_FILE: service-account JSON reported once on the priva
   const hits = byRule(r, 'COMMITTED_CREDENTIAL_FILE');
   assert.equal(hits.length, 1);
   assert.equal(hits[0].line, lineOfKey);
-  assert.equal(hits[0].severity, 'HIGH');
+  assert.equal(hits[0].severity, 'CRITICAL');
   assert.equal(hits[0].confidence, 'high');
   assert.match(hits[0].filePath, /firebase-adminsdk-abc\.json$/);
   // same line must not also carry an API_KEY_EXPOSED / HARDCODED_SECRETS finding

@@ -6,6 +6,14 @@ on:
   push:
     branches: [ main, develop ]
 
+# upload-sarif needs security-events: write, the PR comment needs pull-requests: write.
+# On pull requests from forks GitHub gives the token read-only access: the SARIF upload and the comment
+# fail there, so skip those steps for forks or run this workflow from a trusted trigger.
+permissions:
+  contents: read
+  security-events: write
+  pull-requests: write
+
 jobs:
   security-scan:
     runs-on: ubuntu-latest
@@ -23,24 +31,16 @@ jobs:
         cache: 'npm'
     
     - name: Install rnsec
+      # --owasp, --format and the critical severity need rnsec 1.5.0 or newer
       run: npm install -g rnsec
     
-    - name: Run security scan on changed files
+    - name: Scan changed files (source for the PR comment)
+      if: github.event_name == 'pull_request'
       env:
-        BASE_REF: ${{ github.base_ref || 'main' }}
-      # One command writes all reports: a failing first scan (exit 1 on HIGH findings) would otherwise stop a second one.
+        BASE_REF: ${{ github.base_ref }}
+      # --fail-on none: this scan only feeds the comment, the full scan below is the gate.
       # origin/<branch>: pull request checkouts have no local branch for the base.
-      run: rnsec scan --changed-files "origin/$BASE_REF" --md security-report.md --html security-report.html --output rnsec-report.json --silent
-      continue-on-error: true
-    
-    - name: Upload security reports
-      uses: actions/upload-artifact@v7
-      with:
-        name: security-reports
-        path: |
-          security-report.md
-          security-report.html
-        retention-days: 30
+      run: rnsec scan --changed-files "origin/$BASE_REF" --md security-report.md --output rnsec-report.json --fail-on none --silent
     
     - name: Comment PR with security results
       if: github.event_name == 'pull_request'
@@ -117,20 +117,32 @@ jobs:
             console.log('Error posting security report:', error.message);
           }
     
-    - name: Full security scan (optional)
-      if: github.event_name == 'push'
-      run: |
-        # Run full scan on pushes to main branch
-        rnsec scan --md full-security-report.md --html full-security-report.html --output full-security-report.json
-      continue-on-error: true
+    - name: Full security scan (fails the job on findings)
+      # Exit codes: 0 clean, 1 a finding at or above --fail-on, 2 rnsec error (bad option, unreadable config).
+      # --sarif writes the SARIF file even when the scan exits 1. --owasp adds the MASVS coverage section
+      # to full-security-report.json; the SARIF always carries the MASVS taxonomy, tags and help links.
+      # Always scan the whole project for SARIF: a --changed-files report would close Code Scanning alerts
+      # of every file it did not scan.
+      run: rnsec scan --owasp --sarif rnsec.sarif --md full-security-report.md --html full-security-report.html --output full-security-report.json --fail-on high --silent
     
-    - name: Upload full scan reports
-      if: github.event_name == 'push'
+    - name: Upload SARIF to GitHub Code Scanning
+      # Runs after a failed scan too; skipped when the scan crashed (exit 2) and wrote no SARIF.
+      if: always() && hashFiles('rnsec.sarif') != ''
+      uses: github/codeql-action/upload-sarif@v4
+      with:
+        sarif_file: rnsec.sarif
+        category: rnsec
+    
+    - name: Upload security reports
+      if: always()
       uses: actions/upload-artifact@v7
       with:
-        name: full-security-reports
+        name: security-reports
         path: |
+          security-report.md
           full-security-report.md
           full-security-report.html
           full-security-report.json
+          rnsec.sarif
+        if-no-files-found: ignore
         retention-days: 30

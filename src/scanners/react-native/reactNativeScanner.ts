@@ -4,6 +4,7 @@ import type { Rule, RuleContext, RuleGroup } from '../../types/ruleTypes.js';
 import { Severity, type Finding } from '../../types/findings.js';
 import { getLineNumber, extractSnippet } from '../../utils/stringUtils.js';
 import { RuleCategory } from '../../types/ruleTypes.js';
+import { established, loadJsExpoConfig, prop, type Node } from '../security/expoConfigScanner.js';
 
 /** Package name of an import specifier ("lodash/fp" -> "lodash", "@a/b/c" -> "@a/b"); null for relative/absolute paths */
 function packageNameOf(specifier: string): string | null {
@@ -987,9 +988,48 @@ const expoUpdatesNoCodeSigningRule: Rule = {
   id: 'EXPO_UPDATES_NO_CODE_SIGNING',
   description: 'Expo OTA updates configured without code signing verification',
   severity: Severity.HIGH,
-  fileTypes: ['.json'],
+  fileTypes: ['.json', '.js', '.ts'],
   apply: async (context: RuleContext): Promise<Finding[]> => {
     const findings: Finding[] = [];
+
+    // app.config.js/ts: absence is only reported when the whole updates setup is a plain literal.
+    // A dynamic spread (`...config`) or a non-literal `updates` could carry the certificate.
+    const jsExpo = loadJsExpoConfig(context);
+    if (jsExpo) {
+      if (jsExpo.t !== 'obj') return findings;
+      const updatesNode = established(jsExpo, 'updates');
+      const updates = updatesNode?.t === 'obj' ? updatesNode : undefined;
+      if (updatesNode && !updates) return findings; // updates: someVariable
+      if (updates?.spread) return findings;
+      // without a literal `updates`, a root spread may still supply it
+      if (!updates && jsExpo.spread) return findings;
+
+      const runtimeVersion = established(jsExpo, 'runtimeVersion');
+      const plugins = prop(jsExpo, 'plugins');
+      const hasPlugin =
+        plugins?.t === 'arr' &&
+        plugins.items.some(
+          (p: Node) => (p.t === 'str' && p.v === 'expo-updates') || (p.t === 'arr' && p.items[0]?.t === 'str' && p.items[0].v === 'expo-updates')
+        );
+      if (!updates && !runtimeVersion && !hasPlugin) return findings;
+
+      const hasCodeSigning = updates
+        ? updates.props.has('codeSigningCertificate') || updates.props.has('codeSigningMetadata')
+        : false;
+      if (!hasCodeSigning) {
+        const line = (updates ?? runtimeVersion)?.line ?? 1;
+        findings.push({
+          ruleId: 'EXPO_UPDATES_NO_CODE_SIGNING',
+          description: 'Expo OTA updates enabled without code signing - updates can be tampered with',
+          severity: Severity.HIGH,
+          filePath: context.filePath,
+          line,
+          snippet: extractSnippet(context.fileContent, line, 1),
+          suggestion: 'Enable code signing for Expo updates to prevent tampered OTA updates. Configure codeSigningCertificate in updates config.',
+        });
+      }
+      return findings;
+    }
 
     if (!context.config || !context.filePath.includes('app.json')) {
       return findings;

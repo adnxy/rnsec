@@ -16,6 +16,10 @@ const KIND: Record<string, { label: string; severity: Severity }> = {
   mobileprovision: { label: 'iOS provisioning profile with embedded certificates', severity: Severity.MEDIUM },
 };
 
+// An unencrypted PEM private key is usable as is. Rated CRITICAL (direct access, no further precondition);
+// keystores and .p12 files are password protected and stay HIGH.
+const PEM_PRIVATE_KEY = /-----BEGIN (?:[A-Z]+ )?PRIVATE KEY-----/;
+
 /** 1-based line of the `"private_key"` entry in raw JSON text. */
 function privateKeyLine(text: string): number {
   const m = /"private_key"\s*:/.exec(text);
@@ -42,11 +46,12 @@ const committedCredentialFileRule: Rule = {
       if (!cfg || typeof cfg !== 'object') return [];
       if (cfg.type !== 'service_account') return [];
       if (typeof cfg.private_key !== 'string' || cfg.private_key.trim() === '') return [];
+      const usable = PEM_PRIVATE_KEY.test(cfg.private_key);
       return [
         {
           ruleId: 'COMMITTED_CREDENTIAL_FILE',
           description: `${name} is a committed service-account credential containing a private key`,
-          severity: Severity.HIGH,
+          severity: usable ? Severity.CRITICAL : Severity.HIGH,
           confidence: 'high',
           filePath: context.filePath,
           line: privateKeyLine(context.fileContent),
@@ -58,11 +63,13 @@ const committedCredentialFileRule: Rule = {
 
     const kind = KIND[ext];
     if (!kind) return [];
+    // An Apple .p8 holding an unencrypted PEM key grants API access (APNs, App Store Connect) by itself
+    const severity = ext === 'p8' && PEM_PRIVATE_KEY.test(context.fileContent) ? Severity.CRITICAL : kind.severity;
     return [
       {
         ruleId: 'COMMITTED_CREDENTIAL_FILE',
         description: `${name} is committed to the repository (${kind.label})`,
-        severity: kind.severity,
+        severity,
         confidence: 'high',
         filePath: context.filePath,
         line: 1,

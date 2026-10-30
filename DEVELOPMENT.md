@@ -82,6 +82,8 @@ UPDATE_SNAPSHOTS=1 npm test
 
 The tests run `dist/index.js`. To test a private build without touching `dist/`, build with `npx tsc --outDir .build-x && cp src/core/template.html .build-x/core/template.html` and run `RNSEC_BIN=.build-x/index.js node --test tests/*.test.mjs`.
 
+`docs/owasp-coverage.md` is generated from the OWASP mapping: after changing `src/standards/owasp/mappings.ts`, the snapshot or the set of rules, run `npm run docs:owasp` and commit the result (`tests/owasp-docs.test.mjs` fails when it is stale). To pin newer OWASP data see [docs/adding-rules.md](docs/adding-rules.md#the-pinned-snapshot-policy).
+
 `tests/docs-consistency.test.mjs` keeps the docs honest: the rule count in `README.md` and `package.json`, the README category table, the version in `package.json` / `src/constants.ts` / `CHANGELOG.md`, and the rule IDs named in the newest CHANGELOG section must all match the CLI.
 
 ### 6. Lint and Type Check
@@ -358,6 +360,7 @@ git push origin v1.1.1
 
 ## Version History
 
+- v1.5.0 - OWASP MASVS/MASWE/MASTG mapping (`--owasp`), `--format`, CRITICAL severity, exit code 2 for errors, `app.config.js` support (106 rules)
 - v1.4.0 - 18 new rules (105 total), SARIF, baselines, `--fail-on`, `.gitignore` support, false-positive reduction
 - v1.3.0 - 20 new rules (87 total), Expo and React Native coverage
 - v1.2.0 - Supply chain rules (`SUSPICIOUS_LIFECYCLE_SCRIPT`, `OBFUSCATED_EVAL_EXECUTION`)
