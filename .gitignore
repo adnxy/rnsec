@@ -18,6 +18,7 @@ rnsec-report.json
 !src/standards/owasp/snapshot.json
 # ...and the benchmark corpus definition
 !bench/corpus.json
+!bench/known-tps.json
 examples/**/rnsec-report.json
 .build-*/
 

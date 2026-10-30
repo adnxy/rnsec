@@ -30,12 +30,12 @@ The report prints findings per rule and per app, and with `--compare` the per-ru
 ## Known-true-positive gate
 
 ```bash
-node bench/check-tps.mjs <known-tps.json> <results dir>
+node bench/check-tps.mjs bench/known-tps.json <results dir>
 ```
 
 The input is `{ "tps": [ { "repo", "rule", "file", "line" } ] }`. A true positive is still reported when a finding has the same rule, a file path ending in `/<repo>/<file>`, and (if `line` is given) a line within 3 of it. The script prints `OK` or `LOST` per entry and exits 1 if any is lost.
 
-The 12 entries used for 1.5.0 are a **reconstructed** gate: a list of known real findings rebuilt for this check. It is small, it is not a sample of the corpus, and the list file is not committed to the repository. Passing the gate means those 12 are still found. It says nothing about other true positives that were never identified.
+The 12 entries used for 1.5.0 are a **reconstructed** gate: a list of known real findings rebuilt for this check. It is small, it is not a sample of the corpus, and one entry (a fourth `IOS_ATS_DISABLED` true positive from the 1.4.0 labels) could not be located, because the original labels were lost. The list is committed as `bench/known-tps.json`. Passing the gate means those 12 are still found. It says nothing about other true positives that were never identified.
 
 ## Safety: clones are untrusted
 
