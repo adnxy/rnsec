@@ -14,6 +14,8 @@ rnsec-report.json
 !tests/**/*.html
 # ...and example project manifests (but not the reports generated inside them)
 !examples/**/*.json
+# ...and the pinned OWASP standards snapshot, which the build copies into dist
+!src/standards/owasp/snapshot.json
 examples/**/rnsec-report.json
 .build-*/
 
